@@ -11,6 +11,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
     const [isInitialized, setIsInitialized] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const lastLoadedDataRef = useRef<string | null>(null); // Stores hash of last loaded schematic
 
     const initializeRenderer = useCallback(async () => {
         if (!canvasRef.current) return;
@@ -38,7 +39,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
                         setIsInitialized(true);
                         setIsLoading(false);
                     },
-                    onSchematicLoaded: (schematicName) => {
+                    onSchematicLoaded: (schematicName: string) => {
                         console.log(`📦 Schematic loaded: ${schematicName}`);
                         setIsLoading(false);
                     },
@@ -54,38 +55,87 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
         }
     }, [isInitialized]);
 
+    // Generate a simple hash of schematic data for comparison
+    const getSchematicHash = useCallback((data: Uint8Array | ArrayBuffer): string => {
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        // Hash based on length + samples from start, middle, end
+        const len = bytes.byteLength;
+        const mid = Math.floor(len / 2);
+        const samples = [
+            len,
+            bytes[0] || 0,
+            bytes[1] || 0,
+            bytes[mid] || 0,
+            bytes[mid + 1] || 0,
+            bytes[len - 2] || 0,
+            bytes[len - 1] || 0,
+        ];
+        return samples.join('-');
+    }, []);
+
     const loadSchematics = useCallback(async () => {
         const renderer = rendererRef.current;
 
-        if (!isInitialized || !renderer || !schematic) return;
+        if (!isInitialized || !renderer || !schematic) {
+            console.log('📦 Not ready to load:', { isInitialized, hasRenderer: !!renderer, hasSchematic: !!schematic });
+            return;
+        }
+        
+        // Check if schematicManager is ready
+        if (!renderer.schematicManager) {
+            console.log('📦 SchematicManager not ready yet, will retry...');
+            return;
+        }
+        
+        // Skip if schematic data hasn't changed
+        const newHash = getSchematicHash(schematic);
+        if (newHash === lastLoadedDataRef.current) {
+            console.log('📦 Schematic data unchanged, skipping reload');
+            return;
+        }
 
+        console.log('📦 Loading new schematic, hash:', newHash);
         setIsLoading(true);
         setError(null);
+
+        // Convert to ArrayBuffer for the renderer FIRST (before any async operations)
+        let dataToLoad: ArrayBuffer;
+        
+        if (schematic instanceof Uint8Array) {
+            dataToLoad = schematic.slice().buffer;
+        } else if (schematic instanceof ArrayBuffer) {
+            dataToLoad = schematic;
+        } else {
+            setError('Invalid schematic format');
+            setIsLoading(false);
+            return;
+        }
 
         const schematicId = `schematic_${Date.now()}`;
 
         try {
-            // Convert to ArrayBuffer for the renderer
-            let dataToLoad: ArrayBuffer;
-            
-            if (schematic instanceof Uint8Array) {
-                dataToLoad = schematic.slice().buffer;
-            } else if (schematic instanceof ArrayBuffer) {
-                dataToLoad = schematic;
-            } else {
-                throw new Error(`Invalid schematic format: Expected Uint8Array or ArrayBuffer`);
+            // Clear existing schematics before loading new one
+            if (lastLoadedDataRef.current !== null && renderer.schematicManager.removeAllSchematics) {
+                console.log('🗑️ Clearing previous schematics...');
+                renderer.schematicManager.removeAllSchematics();
+                // Wait a frame for the clear to take effect
+                await new Promise(resolve => requestAnimationFrame(resolve));
             }
-
-            await renderer.schematicManager?.loadSchematic(schematicId, dataToLoad);
             
-            // Successfully loaded - stop loading state
+            console.log('📦 Loading schematic data...');
+            await renderer.schematicManager.loadSchematic(schematicId, dataToLoad);
+            
+            // Store hash of successfully loaded data
+            lastLoadedDataRef.current = newHash;
+            
+            console.log('✅ Schematic loaded successfully');
             setIsLoading(false);
         } catch (loadError) {
             console.error('❌ Failed to load schematic:', loadError);
             setError('Failed to load schematic');
             setIsLoading(false);
         }
-    }, [isInitialized, schematic]);
+    }, [isInitialized, schematic, getSchematicHash]);
 
     // Handle canvas resize
     const handleResize = useCallback(() => {
@@ -98,11 +148,23 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
         return () => clearTimeout(timer);
     }, [initializeRenderer]);
 
+    // Load schematic when ready - with retry logic
     useEffect(() => {
-        if (schematic) {
-            loadSchematics();
+        if (!schematic) return;
+        
+        // If not initialized yet, wait for initialization
+        if (!isInitialized) {
+            console.log('📦 Waiting for renderer to initialize before loading schematic...');
+            return;
         }
-    }, [schematic, loadSchematics]);
+        
+        // Try to load, with a small delay to ensure schematicManager is ready
+        const timer = setTimeout(() => {
+            loadSchematics();
+        }, 50);
+        
+        return () => clearTimeout(timer);
+    }, [schematic, isInitialized, loadSchematics]);
 
     // Handle resize
     useEffect(() => {

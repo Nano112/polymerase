@@ -137,11 +137,56 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   const TypeIcon = getTypeIcon();
 
   const renderPreview = () => {
-    if (!hasInput || inputValue === undefined) {
+    // Show "no input" only if there's no connection AND no cached schematic to display
+    if (!hasInput && !hasSchematicToShow) {
       return (
         <div className="text-center text-neutral-500 py-6">
           <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
           <div className="text-xs">No input connected</div>
+        </div>
+      );
+    }
+    
+    // If input is invalidated but we have a cached schematic, show it
+    if ((!hasInput || inputValue === undefined) && hasSchematicToShow) {
+      const schematicWrapper = displayValue as SchematicData;
+      const binaryData = schematicWrapper.data instanceof Uint8Array 
+        ? schematicWrapper.data 
+        : new TextEncoder().encode(schematicWrapper.data as string);
+      const byteSize = binaryData.byteLength;
+      const name = schematicWrapper.metadata?.name || 'Schematic';
+      
+      return (
+        <div className="flex flex-col h-full w-full relative">
+          {/* Show overlay when cache is invalidated/re-executing */}
+          <div className="absolute inset-0 bg-neutral-900/60 z-10 flex items-center justify-center rounded">
+            <div className="text-xs text-neutral-400 animate-pulse">
+              {isExecuting ? 'Updating...' : 'Waiting for input...'}
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 w-full">
+            <MemoizedSchematicRenderer schematic={binaryData} />
+          </div>
+          <div className="text-center mt-2 flex-shrink-0">
+            <div className="text-xs text-neutral-300 font-medium">{name}</div>
+            <div className="text-[10px] text-neutral-500">
+              {schematicWrapper.format} • {byteSize} bytes
+            </div>
+          </div>
+          <button className="mt-2 w-full flex-shrink-0 flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
+            <Download className="w-3 h-3" />
+            Download
+          </button>
+        </div>
+      );
+    }
+    
+    // No input value yet
+    if (inputValue === undefined) {
+      return (
+        <div className="text-center text-neutral-500 py-6">
+          <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <div className="text-xs">Waiting for data...</div>
         </div>
       );
     }
