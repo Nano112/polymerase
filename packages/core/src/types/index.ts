@@ -14,11 +14,15 @@ export interface IODefinition {
 }
 
 export interface IOPort {
-  name: string;
+  name?: string;
   type: string;
   required?: boolean;
   default?: unknown;
   description?: string;
+  options?: string[];  // For select inputs
+  min?: number;        // For number inputs
+  max?: number;        // For number inputs
+  step?: number;       // For number inputs
 }
 
 /**

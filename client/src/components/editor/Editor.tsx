@@ -1,5 +1,5 @@
 /**
- * Editor - Main flow editor component
+ * Editor - Main flow editor component with execution state visualization
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -20,9 +20,11 @@ import {
   Zap,
   Terminal,
   Code,
+  RotateCcw,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
+import { edgeTypes } from '../edges';
 import { Toolbar } from './Toolbar';
 import { CodePanel } from './CodePanel';
 import { ExecutionPanel } from './ExecutionPanel';
@@ -45,6 +47,9 @@ export function Editor() {
     selectedNodeId,
     selectNode,
     deleteNode,
+    clearAllCache,
+    nodeCache,
+    isExecuting,
   } = useFlowStore();
 
   // Modal states
@@ -60,13 +65,16 @@ export function Editor() {
 
   // Handle node double-click to open editor
   const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: { id: string; type?: string }) => {
+    // First select the node
+    selectNode(node.id);
+    // Then open the appropriate editor
     setEditingNodeId(node.id);
     if (node.type === 'code') {
       setShowCodeEditor(true);
     } else {
       setShowNodeProperties(true);
     }
-  }, []);
+  }, [selectNode]);
 
   // Handle keyboard shortcuts
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
@@ -81,6 +89,10 @@ export function Editor() {
   }, [selectedNodeId, deleteNode, selectNode, showCodeEditor, showNodeProperties]);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
+  
+  // Calculate cache stats
+  const completedCount = Object.values(nodeCache).filter(c => c.status === 'completed').length;
+  const totalNodes = nodes.length;
 
   return (
     <div 
@@ -118,12 +130,36 @@ export function Editor() {
           </div>
         </div>
 
+        {/* Center: Execution status */}
+        <div className="flex items-center gap-3">
+          {totalNodes > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${completedCount === totalNodes ? 'bg-green-500' : 'bg-neutral-600'}`} />
+                <span className="text-xs text-neutral-400">
+                  {completedCount}/{totalNodes} computed
+                </span>
+              </div>
+              {completedCount > 0 && (
+                <button
+                  onClick={clearAllCache}
+                  className="p-1 rounded hover:bg-neutral-700/50 text-neutral-500 hover:text-neutral-300 transition-colors"
+                  title="Clear all cached results"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
           {selectedNode && (
             <button
               onClick={() => {
-                setEditingNodeId(selectedNodeId);
+                // Use selectedNode.id directly to ensure we have the correct ID
+                setEditingNodeId(selectedNode.id);
                 if (selectedNode.type === 'code') {
                   setShowCodeEditor(true);
                 } else {
@@ -143,10 +179,17 @@ export function Editor() {
           
           <button
             onClick={() => setShowExecution(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-500/80 hover:to-emerald-500/80 text-white text-sm font-medium transition-all"
+            disabled={isExecuting}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-all
+              ${isExecuting 
+                ? 'bg-amber-600/80 cursor-wait' 
+                : 'bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-500/80 hover:to-emerald-500/80'
+              }
+            `}
           >
             <Play className="w-4 h-4" />
-            Execute
+            {isExecuting ? 'Running...' : 'Execute'}
           </button>
         </div>
       </div>
@@ -164,13 +207,13 @@ export function Editor() {
           onNodeClick={(_event, node) => selectNode(node.id)}
           onPaneClick={() => selectNode(null)}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           snapToGrid
           snapGrid={[16, 16]}
           defaultEdgeOptions={{
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: '#525252', strokeWidth: 2 },
+            type: 'data',
+            animated: false,
           }}
           proOptions={{ hideAttribution: true }}
         >
@@ -179,11 +222,19 @@ export function Editor() {
           <MiniMap
             className="!bg-neutral-900 !border-neutral-800 !rounded-xl !shadow-xl"
             nodeColor={(node) => {
+              const cache = nodeCache[node.id];
+              if (cache?.status === 'completed') return '#22c55e';
+              if (cache?.status === 'running') return '#f59e0b';
+              if (cache?.status === 'error') return '#ef4444';
+              
               switch (node.type) {
-                case 'code': return '#22c55e';
+                case 'code': return '#22c55e40';
+                case 'input':
                 case 'number_input':
                 case 'text_input':
-                case 'boolean_input': return '#a855f7';
+                case 'boolean_input':
+                case 'select_input': return '#a855f7';
+                case 'viewer': return '#ec4899';
                 case 'schematic_input': return '#f97316';
                 case 'schematic_output': return '#06b6d4';
                 case 'schematic_viewer': return '#ec4899';
@@ -195,8 +246,17 @@ export function Editor() {
           
           {/* Help Panel */}
           <Panel position="bottom-center">
-            <div className="bg-neutral-900/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-neutral-800/50 text-xs text-neutral-500">
-              Double-click a node to edit • Delete key to remove • Drag to connect
+            <div className="bg-neutral-900/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-neutral-800/50 text-xs text-neutral-500 flex items-center gap-4">
+              <span>Double-click to edit</span>
+              <span className="text-neutral-700">•</span>
+              <span>Delete to remove</span>
+              <span className="text-neutral-700">•</span>
+              <span>Drag handles to connect</span>
+              <span className="text-neutral-700">•</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                Data ready
+              </span>
             </div>
           </Panel>
         </ReactFlow>

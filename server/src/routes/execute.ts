@@ -145,10 +145,12 @@ executeRouter.post('/script', async (c) => {
       return c.json({ success: false, error: 'Code is required' }, 400);
     }
 
+    console.log('[Execute] Running script with inputs:', inputs);
+
     // Set up the engine
     const contextProviders = await createContextProviders({
       logCallback: (entry) => {
-        console.log(`[${entry.level}] ${entry.message}`);
+        console.log(`[Script] [${entry.level}] ${entry.message}`);
       },
     });
 
@@ -163,24 +165,72 @@ executeRouter.post('/script', async (c) => {
     // Clean up
     engine.destroy();
 
-    // Process result
-    let processedResult = result.result;
-    let schematicData = null;
+    console.log('[Execute] Result:', {
+      success: result.success,
+      hasSchematic: result.hasSchematic,
+      resultKeys: result.result ? Object.keys(result.result) : [],
+      schematicKeys: result.schematics ? Object.keys(result.schematics) : [],
+    });
 
-    if (result.hasSchematic && result.schematics) {
-      schematicData = {};
-      for (const [key, schem] of Object.entries(result.schematics)) {
-        if (schem && (schem instanceof Uint8Array || ArrayBuffer.isView(schem))) {
-          const bytes = schem instanceof Uint8Array ? schem : new Uint8Array((schem as ArrayBufferView).buffer);
-          (schematicData as Record<string, string>)[key] = Buffer.from(bytes).toString('base64');
+    // Process result - convert schematic objects to base64
+    const schematicData: Record<string, string> = {};
+
+    // Check the result object for schematic wrapper instances
+    if (result.result) {
+      for (const [key, value] of Object.entries(result.result)) {
+        // Check if the value is a schematic wrapper (has to_schematic method)
+        if (value && typeof value === 'object' && 'to_schematic' in value) {
+          const wrapper = value as { to_schematic: () => Uint8Array };
+          try {
+            const bytes = wrapper.to_schematic();
+            schematicData[key] = Buffer.from(bytes).toString('base64');
+            console.log(`[Execute] Converted schematic "${key}" to base64 (${bytes.length} bytes)`);
+          } catch (err) {
+            console.error(`[Execute] Failed to convert schematic "${key}":`, err);
+          }
         }
       }
     }
 
+    // Also check the schematics field if it exists
+    if (result.schematics) {
+      for (const [key, schem] of Object.entries(result.schematics)) {
+        if (schem && typeof schem === 'object' && 'to_schematic' in schem) {
+          const wrapper = schem as { to_schematic: () => Uint8Array };
+          try {
+            const bytes = wrapper.to_schematic();
+            schematicData[key] = Buffer.from(bytes).toString('base64');
+            console.log(`[Execute] Converted schematic "${key}" from schematics field to base64 (${bytes.length} bytes)`);
+          } catch (err) {
+            console.error(`[Execute] Failed to convert schematic from schematics field "${key}":`, err);
+          }
+        } else if (schem instanceof Uint8Array || ArrayBuffer.isView(schem)) {
+          const bytes = schem instanceof Uint8Array ? schem : new Uint8Array((schem as ArrayBufferView).buffer);
+          schematicData[key] = Buffer.from(bytes).toString('base64');
+        }
+      }
+    }
+
+    // Build response result without schematic wrapper objects
+    const processedResult: Record<string, unknown> = {};
+    if (result.result) {
+      for (const [key, value] of Object.entries(result.result)) {
+        if (value && typeof value === 'object' && 'to_schematic' in value) {
+          // Skip schematic wrappers in result (they're in schematics field)
+          processedResult[key] = '[Schematic Object]';
+        } else {
+          processedResult[key] = value;
+        }
+      }
+    }
+
+    const hasSchematic = Object.keys(schematicData).length > 0;
+
     return c.json({
       success: result.success,
       result: processedResult,
-      schematics: schematicData,
+      schematics: hasSchematic ? schematicData : null,
+      hasSchematic,
       executionTime: result.executionTime,
       error: result.error?.message,
     });

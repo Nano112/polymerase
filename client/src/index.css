@@ -44,10 +44,30 @@ html, body, #root {
 /* React Flow overrides */
 .react-flow__node {
   cursor: grab;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .react-flow__node:active {
   cursor: grabbing;
+}
+
+.react-flow__node.selected {
+  box-shadow: none !important;
+}
+
+/* Remove default node wrapper styles */
+.react-flow__node-default,
+.react-flow__node-input,
+.react-flow__node-output,
+.react-flow__node-code,
+.react-flow__node-inputNode {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
 .react-flow__handle {
@@ -261,4 +281,70 @@ html, body, #root {
 
 .animate-scale-in {
   animation: scaleIn 0.2s ease-out;
+}
+
+/* Slider/Range input styles */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: #262626;
+  border-radius: 4px;
+  height: 8px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  margin-top: -5px;
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.6);
+}
+
+input[type="range"]::-moz-range-track {
+  background: #262626;
+  border-radius: 4px;
+  height: 8px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: none;
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4);
+}
+
+/* Animated edge for running state */
+@keyframes flowAnimation {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animated-edge {
+  stroke-dasharray: 5 5;
+  animation: flowAnimation 0.5s linear infinite;
+}
+
+/* Edge hover effect */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3;
 }

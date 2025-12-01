@@ -14,7 +14,9 @@
     "@polymerase/core": "workspace:*",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.7.11",
-    "shared": "workspace:*"
+    "nucleation": "^0.1.127",
+    "shared": "workspace:*",
+    "synthase": "^1.0.3"
   },
   "devDependencies": {
     "@types/bun": "latest",

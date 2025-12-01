@@ -39,7 +39,7 @@ export const app = new Hono()
 
 	// API Routes
 	.route('/api/flows', flowsRouter)
-	.route('/api', executeRouter);
+	.route('/api/execute', executeRouter);
 
 // Export for Hono client type inference
 export type AppType = typeof app;
