@@ -131,7 +131,29 @@ export function Editor() {
       const result = await executeScript(code, inputValues);
 
       if (result.success) {
-        setNodeExecutionStatus(primaryNode.id, 'completed', result.result);
+        // Build final result with binary schematic data
+        let finalResult: Record<string, unknown>;
+        
+        if (result.schematics && Object.keys(result.schematics).length > 0) {
+          // If we have schematics, use binary data
+          if ('default' in result.schematics) {
+            // Direct return case: `return schem;` - use the binary as the result
+            finalResult = { default: result.schematics.default };
+          } else {
+            // Dictionary return case: `return { schem };`
+            finalResult = { ...result.result };
+            for (const [key, value] of Object.entries(result.schematics)) {
+              if (value) {
+                finalResult[key] = value;
+              }
+            }
+          }
+        } else {
+          // No schematics, use result as-is
+          finalResult = result.result || {};
+        }
+
+        setNodeExecutionStatus(primaryNode.id, 'completed', finalResult);
         addExecutionLog('[OK] Execution successful');
         if (result.executionTime) {
           addExecutionLog(`Completed in ${result.executionTime}ms`);

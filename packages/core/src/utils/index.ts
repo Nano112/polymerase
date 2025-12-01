@@ -14,7 +14,6 @@ export {
 } from './vector.js';
 export { 
   initializeSchematicProvider, 
-  MockSchematic, 
   SchematicUtils,
   type SchematicWrapper, 
   type SchematicClass 

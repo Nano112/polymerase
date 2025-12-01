@@ -1,12 +1,11 @@
-import { SchematicWrapper } from 'nucleation';
 import { SchematicRenderer as Renderer } from 'schematic-renderer';
+import { useRef, useState, useEffect, useCallback } from 'react';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-
-const SchematicRenderer = ({ schematic }: { schematic: SchematicWrapper }) => {
-
-    // log the schematic prop
-    console.log('Received schematic prop:', schematic);
+/**
+ * SchematicRenderer component - renders schematic binary data (Uint8Array/ArrayBuffer)
+ * Expects binary .schem format data, not WASM objects.
+ */
+const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rendererRef = useRef<Renderer | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
@@ -60,18 +59,27 @@ const SchematicRenderer = ({ schematic }: { schematic: SchematicWrapper }) => {
 
         if (!isInitialized || !renderer || !schematic) return;
 
-       
         setIsLoading(true);
         setError(null);
 
-        const schematicId = `schematic_${name}`;
+        const schematicId = `schematic_${Date.now()}`;
 
         try {
-            console.log(`➡️ Loading schematic ${name} into renderer...`);
-            await renderer.schematicManager.loadSchematic(schematicId, schematic);
+            // Convert to ArrayBuffer for the renderer
+            let dataToLoad: ArrayBuffer;
+            
+            if (schematic instanceof Uint8Array) {
+                dataToLoad = schematic.slice().buffer;
+            } else if (schematic instanceof ArrayBuffer) {
+                dataToLoad = schematic;
+            } else {
+                throw new Error(`Invalid schematic format: Expected Uint8Array or ArrayBuffer`);
+            }
+
+            await renderer.schematicManager?.loadSchematic(schematicId, dataToLoad);
         } catch (loadError) {
-            console.error(`❌ Failed to load schematic ${name}:`, loadError);
-            setError(`Failed to load schematic: ${name}`);
+            console.error('❌ Failed to load schematic:', loadError);
+            setError('Failed to load schematic');
         }
 
 

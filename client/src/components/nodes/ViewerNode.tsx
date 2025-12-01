@@ -2,9 +2,9 @@ import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Eye, Box, Hash, Type, ToggleLeft, Code2, ArrowRight, Download } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
+import { isSchematicData, type SchematicData } from '@polymerase/core';
 
 // Adjust these imports based on your actual file structure
-import { SchematicWrapper } from 'nucleation';
 import SchematicRenderer from '../others/SchematicRenderer';
 
 interface ViewerNodeData {
@@ -15,22 +15,26 @@ interface ViewerNodeData {
 // --- 1. MEMOIZED RENDERER WRAPPER ---
 // This is critical. It prevents the 3D canvas from re-initializing 
 // every time React Flow updates the node position or selection.
-const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: SchematicWrapper }) => {
+const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: Uint8Array | ArrayBuffer }) => {
   return (
     <div className="w-full h-32 bg-neutral-950 rounded border border-neutral-800 overflow-hidden relative">
-      <SchematicRenderer schematic={schematic} name="viewer_preview" />
+      <SchematicRenderer schematic={schematic} />
     </div>
   );
 }, (prev, next) => {
-  // Custom comparison: Only re-render if the internal WASM pointer changes.
-  // We check both standard locations for the pointer.
-  const prevPtr = (prev.schematic as any)?.__wbg_ptr || (prev.schematic as any)?.ptr;
-  const nextPtr = (next.schematic as any)?.__wbg_ptr || (next.schematic as any)?.ptr;
+  // Compare by byte length and first few bytes for efficiency
+  if (prev.schematic === next.schematic) return true;
+  if (!prev.schematic || !next.schematic) return false;
   
-  // If both are undefined (e.g. null input), standard reference check
-  if (!prevPtr && !nextPtr) return prev.schematic === next.schematic;
+  const prevBytes = prev.schematic instanceof Uint8Array ? prev.schematic : new Uint8Array(prev.schematic);
+  const nextBytes = next.schematic instanceof Uint8Array ? next.schematic : new Uint8Array(next.schematic);
   
-  return prevPtr === nextPtr;
+  if (prevBytes.byteLength !== nextBytes.byteLength) return false;
+  // Check first 8 bytes for quick comparison
+  for (let i = 0; i < Math.min(8, prevBytes.byteLength); i++) {
+    if (prevBytes[i] !== nextBytes[i]) return false;
+  }
+  return true;
 });
 
 const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeData }) => {
@@ -43,8 +47,35 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
   // Get input data from the cache
   const inputEdge = edges.find(e => e.target === id);
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
-  const inputValue = sourceCache?.output;
+  const rawOutput = sourceCache?.output;
   const hasInput = inputEdge && sourceCache?.status === 'completed';
+  
+  // Extract actual value - if output is an object with a single key containing SchematicData,
+  // unwrap it for display. This handles cases like { default: SchematicData }
+  const inputValue = (() => {
+    if (!rawOutput || typeof rawOutput !== 'object') return rawOutput;
+    
+    // If it's already a SchematicData, use it directly
+    if (isSchematicData(rawOutput)) return rawOutput;
+    
+    // Check if it's an object with schematic values
+    const entries = Object.entries(rawOutput as Record<string, unknown>);
+    if (entries.length === 1) {
+      const [, value] = entries[0];
+      if (isSchematicData(value)) {
+        return value; // Unwrap single schematic
+      }
+    }
+    
+    // Check if any value is a schematic (prioritize showing schematic)
+    for (const [, value] of entries) {
+      if (isSchematicData(value)) {
+        return value;
+      }
+    }
+    
+    return rawOutput;
+  })();
   
   const passthrough = data.passthrough ?? false;
 
@@ -58,19 +89,12 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
     if (value === null || value === undefined) return 'null';
     if (Array.isArray(value)) return 'array';
     
-    // Check for WASM pointer or Class instance
-    const isWasmObject = value && typeof value === 'object' && '__wbg_ptr' in (value as any);
-    const isSchematicInstance = value instanceof SchematicWrapper;
-
-    if (isWasmObject || isSchematicInstance) {
+    // Check for SchematicData wrapper (has format + data properties)
+    if (isSchematicData(value)) {
       return 'schematic';
     }
     
     if (typeof value === 'object') {
-      // Check for schematic-like POJO (Plain Old JS Object)
-      if ('blocks' in (value as object) || 'dimensions' in (value as object)) {
-        return 'schematic';
-      }
       return 'object';
     }
     return typeof value;
@@ -92,22 +116,6 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
 
   const TypeIcon = getTypeIcon();
 
-  // Helper to safely read dimensions from WASM without crashing
-  const getSchematicDims = (val: any) => {
-    try {
-      if (val instanceof SchematicWrapper || (val && typeof val.get_dimensions === 'function')) {
-        const d = val.get_dimensions();
-        return { x: d[0], y: d[1], z: d[2] };
-      }
-    } catch (e) {
-      // WASM memory might be busy or invalid, ignore dimension read
-      return null;
-    }
-    // Fallback for POJOs
-    if (val?.dimensions) return val.dimensions;
-    return null;
-  };
-
   const renderPreview = () => {
     if (!hasInput || inputValue === undefined) {
       return (
@@ -123,13 +131,13 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         return (
           <div className="text-center py-4">
             <div className="text-3xl font-mono font-bold text-blue-400">
-              {typeof inputValue === 'number' ? inputValue.toLocaleString() : inputValue}
+              {typeof inputValue === 'number' ? inputValue.toLocaleString() : String(inputValue)}
             </div>
             <div className="text-[10px] text-neutral-500 mt-1">number</div>
           </div>
         );
 
-      case 'string':
+      case 'string': {
         const strValue = String(inputValue);
         return (
           <div className="py-2">
@@ -139,6 +147,7 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
             <div className="text-[10px] text-neutral-500 mt-1">string ({strValue.length} chars)</div>
           </div>
         );
+      }
 
       case 'boolean':
         return (
@@ -150,21 +159,25 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
           </div>
         );
 
-      case 'schematic':
-        const dims = getSchematicDims(inputValue);
+      case 'schematic': {
+        const schematicWrapper = inputValue as SchematicData;
+        const binaryData = schematicWrapper.data instanceof Uint8Array 
+          ? schematicWrapper.data 
+          : new TextEncoder().encode(schematicWrapper.data as string);
+        const byteSize = binaryData.byteLength;
+        const name = schematicWrapper.metadata?.name || 'Schematic';
+        
         return (
           <div className="py-2 w-full">
             <div className="flex items-center justify-center mb-2 w-full">
               {/* Using the Memoized Component here */}
-              <MemoizedSchematicRenderer schematic={inputValue as SchematicWrapper} />
+              <MemoizedSchematicRenderer schematic={binaryData} />
             </div>
             <div className="text-center">
-              <div className="text-xs text-neutral-300 font-medium">Schematic</div>
-              {dims && (
-                <div className="text-[10px] text-neutral-500">
-                  {dims.x}×{dims.y}×{dims.z}
-                </div>
-              )}
+              <div className="text-xs text-neutral-300 font-medium">{name}</div>
+              <div className="text-[10px] text-neutral-500">
+                {schematicWrapper.format} • {byteSize} bytes
+              </div>
             </div>
             <button className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
               <Download className="w-3 h-3" />
@@ -172,8 +185,9 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
             </button>
           </div>
         );
+      }
 
-      case 'array':
+      case 'array': {
         const arr = inputValue as unknown[];
         return (
           <div className="py-2">
@@ -188,6 +202,7 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
             <div className="text-[10px] text-neutral-500 mt-1">array ({arr.length} items)</div>
           </div>
         );
+      }
 
       case 'object':
         return (

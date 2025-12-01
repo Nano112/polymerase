@@ -65,15 +65,17 @@ export class SynthaseService {
   }
 
   /**
-   * Check if schematic wrapper is a valid schematic output
+   * Check if value is a SchematicWrapper (nucleation WASM object)
    */
   private isSchematicWrapper(value: unknown): boolean {
     if (!value || typeof value !== 'object') return false;
     
-    // Check for SchematicWrapper methods
     const obj = value as Record<string, unknown>;
+    
+    // Check for SchematicWrapper methods or WASM pointer
     return typeof obj.to_schematic === 'function' || 
-           typeof obj.set_block === 'function';
+           typeof obj.set_block === 'function' ||
+           '__wbg_ptr' in obj;
   }
 
   /**
@@ -111,9 +113,16 @@ export class SynthaseService {
 
       // Find any returned values that are schematics
       const schematics: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(result)) {
-        if (this.isSchematicWrapper(value)) {
-          schematics[key] = value;
+      
+      // Check if the result itself is a schematic (direct return)
+      if (this.isSchematicWrapper(result)) {
+        schematics['default'] = result;
+      } else {
+        // Check each property of the result object
+        for (const [key, value] of Object.entries(result)) {
+          if (this.isSchematicWrapper(value)) {
+            schematics[key] = value;
+          }
         }
       }
 

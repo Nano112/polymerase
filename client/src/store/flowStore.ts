@@ -56,6 +56,8 @@ export interface FlowNode extends Node {
     options?: string[];        // For select
     placeholder?: string;      // For text inputs
     description?: string;      // Input description
+    // Viewer node specific
+    passthrough?: boolean;     // If true, viewer passes value to output
   };
 }
 

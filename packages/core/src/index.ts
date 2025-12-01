@@ -31,7 +31,6 @@ export {
   Vec3,
   VectorUtils,
   initializeSchematicProvider,
-  MockSchematic,
   SchematicUtils,
   Pathfinding,
   MESSAGE_TYPES,

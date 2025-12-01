@@ -152,6 +152,21 @@ export interface SchematicMetadata {
   createdAt?: number;
 }
 
+/**
+ * Type guard to check if a value is a SchematicData object
+ */
+export function isSchematicData(value: unknown): value is SchematicData {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  // Check for required SchematicData properties
+  const validFormats = ['litematic', 'schematic', 'schem', 'nbt', 'mock'];
+  const hasValidFormat = typeof obj.format === 'string' && validFormats.includes(obj.format);
+  const hasData = obj.data instanceof Uint8Array || typeof obj.data === 'string';
+  
+  return hasValidFormat && hasData;
+}
+
 // ============================================================================
 // Worker Communication Types
 // ============================================================================

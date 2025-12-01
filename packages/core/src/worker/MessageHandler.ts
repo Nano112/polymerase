@@ -3,7 +3,7 @@
  * Used by both browser WebWorkers and Bun Worker Threads
  */
 
-import { MESSAGE_TYPES, type MessageType, type WorkerMessage } from '../types/index.js';
+import { MESSAGE_TYPES, type MessageType, type WorkerMessage, type SchematicData } from '../types/index.js';
 import { SynthaseService } from '../services/SynthaseService.js';
 import { createContextProviders } from './contextProviders.js';
 import type { IODefinition } from '../types/index.js';
@@ -223,26 +223,39 @@ export class MessageHandler {
   }
 
   /**
-   * Process schematics for transfer to main thread
+   * Process schematics for transfer to main thread.
+   * Serializes SchematicWrapper WASM objects to SchematicData objects
+   * since WASM objects cannot be transferred across worker boundaries.
    */
   private async processSchematicsForTransfer(
     schematics: Record<string, unknown>
-  ): Promise<Record<string, unknown>> {
-    const processed: Record<string, unknown> = {};
+  ): Promise<Record<string, SchematicData>> {
+    const processed: Record<string, SchematicData> = {};
 
     for (const [key, schematic] of Object.entries(schematics)) {
       try {
-        const schem = schematic as { to_schematic?: () => Uint8Array };
-        if (schem && typeof schem.to_schematic === 'function') {
-          const schematicData = schem.to_schematic();
-          processed[key] = schematicData;
-          this.postProgress(`Processed schematic: ${key}`);
-        } else {
-          processed[key] = schematic;
+        const schem = schematic as { to_schematic?: () => Uint8Array; name?: () => string };
+        
+        if (!schem) continue;
+
+        // Serialize to binary using to_schematic()
+        if (typeof schem.to_schematic === 'function') {
+          const binaryData = schem.to_schematic();
+          
+          // Wrap in SchematicData for proper typing
+          // to_schematic() outputs .schem format (Sponge schematic)
+          processed[key] = {
+            format: 'schem',
+            data: binaryData,
+            metadata: {
+              name: typeof schem.name === 'function' ? schem.name() : key,
+            }
+          };
+          
+          this.postProgress(`Serialized schematic: ${key} (${binaryData.byteLength} bytes)`);
         }
       } catch (error) {
-        console.warn(`Failed to process schematic ${key}:`, error);
-        processed[key] = null;
+        console.error(`Failed to serialize schematic ${key}:`, error);
       }
     }
 
@@ -271,7 +284,7 @@ interface ExecuteScriptPayload {
 interface ExecuteScriptResult {
   success: boolean;
   result?: Record<string, unknown>;
-  schematics?: Record<string, unknown> | null;
+  schematics?: Record<string, SchematicData> | null;
   executionTime?: number;
 }
 

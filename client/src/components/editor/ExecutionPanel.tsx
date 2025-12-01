@@ -219,8 +219,20 @@ export function ExecutionPanel({ workerClient }: ExecutionPanelProps) {
       setLastResult(executionResult);
 
       if (executionResult.success) {
+        // Replace schematic objects with binary data from result.schematics for the node output
+        const finalResult = { ...executionResult.result };
+        if (result.schematics) {
+          for (const [key, value] of Object.entries(result.schematics)) {
+            if (value) {
+               // Always prefer the binary data from schematics if available
+               // value is Uint8Array from worker
+               finalResult[key] = value;
+            }
+          }
+        }
+
         // Mark code node as completed
-        setNodeExecutionStatus(primaryNode.id, 'completed', executionResult.result);
+        setNodeExecutionStatus(primaryNode.id, 'completed', finalResult);
         
         addExecutionLog('[OK] Script executed successfully');
         

@@ -1,90 +1,7 @@
 /**
  * Schematic provider utilities
- * Handles both real nucleation SchematicWrapper and mock fallback
+ * Uses nucleation SchematicWrapper for WASM-based schematic operations
  */
-
-import type { SchematicMetadata } from '../types/index.js';
-
-/**
- * Mock schematic class for when nucleation WASM is not available
- */
-export class MockSchematic {
-  private blocks: Map<string, string> = new Map();
-  private _size: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
-
-  constructor() {
-    // Mock schematic - nucleation WASM not available
-  }
-
-  set_block(x: number, y: number, z: number, blockType = 'minecraft:air'): void {
-    const key = `${x},${y},${z}`;
-    this.blocks.set(key, blockType);
-    
-    // Track dimensions
-    this._size.x = Math.max(this._size.x, x + 1);
-    this._size.y = Math.max(this._size.y, y + 1);
-    this._size.z = Math.max(this._size.z, z + 1);
-  }
-
-  get_block(x: number, y: number, z: number): string {
-    const key = `${x},${y},${z}`;
-    return this.blocks.get(key) || 'minecraft:air';
-  }
-
-  has_block(x: number, y: number, z: number): boolean {
-    const key = `${x},${y},${z}`;
-    return this.blocks.has(key);
-  }
-
-  get size(): { x: number; y: number; z: number } {
-    return { ...this._size };
-  }
-
-  /**
-   * Mock the to_schematic method that the real SchematicWrapper would have.
-   */
-  to_schematic(): Uint8Array {
-    const mockSchematicData = {
-      format: 'mock',
-      warning: 'This is a mock schematic - nucleation was not available.',
-      blocks: Array.from(this.blocks.entries()),
-      size: this._size,
-    };
-    return new TextEncoder().encode(JSON.stringify(mockSchematicData, null, 2));
-  }
-
-  getSummary(): SchematicMetadata {
-    return {
-      blockCount: this.blocks.size,
-      dimensions: this._size,
-    };
-  }
-
-  /**
-   * Iterate over all blocks
-   */
-  forEachBlock(callback: (x: number, y: number, z: number, blockType: string) => void): void {
-    for (const [key, blockType] of this.blocks) {
-      const [x, y, z] = key.split(',').map(Number);
-      callback(x, y, z, blockType);
-    }
-  }
-
-  /**
-   * Clear all blocks
-   */
-  clear(): void {
-    this.blocks.clear();
-    this._size = { x: 0, y: 0, z: 0 };
-  }
-
-  /**
-   * Get block count
-   */
-  getBlockCount(): number {
-    return this.blocks.size;
-  }
-}
 
 /**
  * Schematic wrapper interface (compatible with nucleation)
@@ -93,44 +10,25 @@ export interface SchematicWrapper {
   set_block(x: number, y: number, z: number, blockType?: string): void;
   get_block(x: number, y: number, z: number): string;
   to_schematic(): Uint8Array;
+  to_litematic(): Uint8Array;
   size?: { x: number; y: number; z: number };
 }
 
 export type SchematicClass = new () => SchematicWrapper;
 
 /**
- * Check if we're in a browser environment with WASM support
- */
-function hasWasmSupport(): boolean {
-  try {
-    return typeof WebAssembly === 'object' &&
-           typeof WebAssembly.instantiate === 'function';
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Asynchronously initializes the nucleation library and returns the appropriate
- * Schematic class (real or mock).
+ * Asynchronously initializes the nucleation library and returns the SchematicWrapper class.
  * @returns The constructor for creating schematics.
+ * @throws Error if nucleation WASM cannot be loaded
  */
 export async function initializeSchematicProvider(): Promise<SchematicClass> {
-  if (!hasWasmSupport()) {
-    return MockSchematic as unknown as SchematicClass;
+  const nucleation = await import('nucleation');
+  
+  if (typeof nucleation.default === 'function') {
+    await nucleation.default();
   }
-
-  try {
-    const nucleation = await import('nucleation');
-    
-    if (typeof nucleation.default === 'function') {
-      await nucleation.default();
-    }
-    
-    return nucleation.SchematicWrapper as SchematicClass;
-  } catch {
-    return MockSchematic as unknown as SchematicClass;
-  }
+  
+  return nucleation.SchematicWrapper as SchematicClass;
 }
 
 /**

@@ -5,6 +5,7 @@
       "name": "polymerase",
       "dependencies": {
         "hono": "^4.10.7",
+        "vite-plugin-wasm": "^3.5.0",
       },
       "devDependencies": {
         "bun-types": "latest",
