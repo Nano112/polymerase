@@ -226,8 +226,8 @@ export function Editor() {
                 const firstKey = Object.keys(finalResult)[0];
                 finalResult['default'] = finalResult[firstKey];
               }
-              
-              console.log('Final result with schematics:', finalResult);
+              const name = node.data.label || node.id;
+              console.log(`Final result with schematics for node "${name}":`, finalResult);
             } else {
               finalResult = result.result || {};
             }

@@ -76,7 +76,8 @@ export const Pathfinding = {
     } = options;
 
     const isWalkable = options.isWalkable || ((x: number, y: number, z: number, schem: SchematicWrapper) => {
-      return walkableBlocks.includes(schem.get_block(x, y, z));
+      const block = schem.get_block(x, y, z);
+      return block !== null && walkableBlocks.includes(block);
     });
 
     const start = startPos instanceof Vec3 ? startPos : Vec3.from(startPos.x, startPos.y, startPos.z);
@@ -204,7 +205,7 @@ export const Pathfinding = {
     
     for (let i = 0; i <= steps; i++) {
       const block = schematic.get_block(x, y, z);
-      if (!walkableBlocks.includes(block)) {
+      if (block === null || !walkableBlocks.includes(block)) {
         return false;
       }
       
@@ -230,7 +231,8 @@ export const Pathfinding = {
     } = options;
 
     const isWalkable = options.isWalkable || ((x: number, y: number, z: number, schem: SchematicWrapper) => {
-      return walkableBlocks.includes(schem.get_block(x, y, z));
+      const block = schem.get_block(x, y, z);
+      return block !== null && walkableBlocks.includes(block);
     });
 
     const position = pos instanceof Vec3 ? pos : Vec3.from(pos.x, pos.y, pos.z);

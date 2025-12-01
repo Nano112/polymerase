@@ -10,10 +10,12 @@ import { isSchematicData, type SchematicData } from '../types/index.js';
  */
 export interface SchematicWrapper {
   set_block(x: number, y: number, z: number, blockType?: string): void;
-  get_block(x: number, y: number, z: number): string;
-  from_data(data: Uint8Array): void;
+  get_block(x: number, y: number, z: number): string | null;
+  from_data(data: Uint8Array): void;  // Note: may throw on error
   to_schematic(): Uint8Array;
   to_litematic(): Uint8Array;
+  get_dimensions(): Int32Array | number[];
+  blocks(): Array<{ x: number; y: number; z: number; name: string }>;
   size?: { x: number; y: number; z: number };
 }
 
@@ -61,22 +63,10 @@ export async function schematicDataToWrapper(schematicData: SchematicData): Prom
     throw new Error('Invalid schematic data format');
   }
   
-  console.log('📦 Loading schematic from data:', {
-    format: schematicData.format,
-    dataLength: binaryData.byteLength,
-    firstBytes: Array.from(binaryData.slice(0, 8)),
-  });
   
   // Load the data into the wrapper
   wrapper.from_data(binaryData);
   
-  // Verify the schematic loaded correctly
-  try {
-    const dims = (wrapper as unknown as { get_dimensions?: () => number[] }).get_dimensions?.();
-    console.log('📦 Loaded schematic dimensions:', dims);
-  } catch (e) {
-    console.log('📦 Could not get dimensions (may be normal)');
-  }
   
   return wrapper;
 }

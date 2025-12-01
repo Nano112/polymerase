@@ -173,10 +173,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
               {schematicWrapper.format} • {byteSize} bytes
             </div>
           </div>
-          <button className="mt-2 w-full flex-shrink-0 flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
-            <Download className="w-3 h-3" />
-            Download
-          </button>
+          
         </div>
       );
     }
@@ -245,16 +242,8 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
               {/* Using the Memoized Component here */}
               <MemoizedSchematicRenderer schematic={binaryData} />
             </div>
-            <div className="text-center mt-2 flex-shrink-0">
-              <div className="text-xs text-neutral-300 font-medium">{name}</div>
-              <div className="text-[10px] text-neutral-500">
-                {schematicWrapper.format} • {byteSize} bytes
-              </div>
-            </div>
-            <button className="mt-2 w-full flex-shrink-0 flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
-              <Download className="w-3 h-3" />
-              Download
-            </button>
+
+
           </div>
         );
       }
@@ -368,7 +357,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
       </div>
 
       {/* Content */}
-      <div className={`${isResized || valueType === 'schematic' ? 'flex-1 min-h-0 p-2' : 'p-3'}`}>
+      <div className={`${isResized || valueType === 'schematic' ? 'flex-1 min-h-0 p-0' : 'p-3'}`}>
         {renderPreview()}
       </div>
 
