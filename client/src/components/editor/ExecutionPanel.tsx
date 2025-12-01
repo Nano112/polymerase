@@ -3,12 +3,13 @@
  * Updates node execution states for visual feedback
  */
 
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { Play, Trash2, Loader2, CheckCircle, XCircle, AlertTriangle, Terminal, Download, Hash, Type, List, Sliders } from 'lucide-react';
 import { useFlowStore, type FlowNode } from '../../store/flowStore';
 import type { IODefinition } from '@polymerase/core';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+import { WorkerClient } from '@polymerase/core/worker';
+// @ts-ignore - Import worker directly from source
+import Worker from '../../../../packages/core/src/worker/browser.worker.ts?worker';
 
 interface SchematicResult {
   [key: string]: string; // base64 encoded schematic data
@@ -23,7 +24,11 @@ interface ExecutionResult {
   logs?: string[];
 }
 
-export function ExecutionPanel() {
+interface ExecutionPanelProps {
+  workerClient?: WorkerClient | null;
+}
+
+export function ExecutionPanel({ workerClient }: ExecutionPanelProps) {
   const { 
     nodes,
     edges,
@@ -39,6 +44,54 @@ export function ExecutionPanel() {
 
   const [inputValues, setInputValues] = useState<Record<string, unknown>>({});
   const [lastResult, setLastResult] = useState<ExecutionResult | null>(null);
+  const localWorkerClientRef = useRef<WorkerClient | null>(null);
+
+  // Use passed worker client or local one
+  const activeWorkerClient = workerClient || localWorkerClientRef.current;
+
+  useEffect(() => {
+    // If workerClient is provided via props, we assume the parent handles initialization and listeners
+    if (workerClient) return;
+
+    // Initialize local worker if none provided
+    const worker = new Worker();
+    const client = new WorkerClient({ worker });
+    localWorkerClientRef.current = client;
+
+    // Set up event listeners for local worker
+    client.on('progress', (payload: any) => {
+      if (payload.message) {
+        // Clean up log prefix if present
+        const message = payload.message.startsWith('Log: ') 
+          ? payload.message.substring(5) 
+          : payload.message;
+        
+        // Determine log level/style based on message content or data
+        let formattedMessage = message;
+        if (payload.data && payload.data.level) {
+           // If we have structured log data
+           const level = payload.data.level.toUpperCase();
+           if (level === 'ERROR') formattedMessage = `[ERROR] ${message}`;
+           else if (level === 'WARN') formattedMessage = `[WARN] ${message}`;
+           else formattedMessage = `[OK] ${message}`;
+        } else if (!message.startsWith('[')) {
+           // Add default prefix if none exists
+           formattedMessage = `[OK] ${message}`;
+        }
+        
+        addExecutionLog(formattedMessage);
+      }
+    });
+
+    client.on('error', (error: any) => {
+      addExecutionLog(`[ERROR] Worker error: ${error.message || error}`);
+    });
+
+    return () => {
+      client.destroy();
+      localWorkerClientRef.current = null;
+    };
+  }, [workerClient, addExecutionLog]);
 
   // Find the first code node to get its IO schema
   const codeNode = useMemo(() => {
@@ -90,7 +143,7 @@ export function ExecutionPanel() {
     setIsExecuting(true);
     clearExecutionLogs();
     setLastResult(null);
-    addExecutionLog('Starting script execution...');
+    addExecutionLog('Starting script execution (local)...');
 
     try {
       // Find the code node and execute its script directly
@@ -111,6 +164,12 @@ export function ExecutionPanel() {
         return;
       }
 
+      if (!activeWorkerClient) {
+        addExecutionLog('[ERROR] Worker client not initialized');
+        setIsExecuting(false);
+        return;
+      }
+
       // Mark all nodes as pending
       for (const node of nodes) {
         setNodeExecutionStatus(node.id, 'pending');
@@ -127,41 +186,60 @@ export function ExecutionPanel() {
 
       addExecutionLog(`Executing "${primaryNode.data.label || 'Code'}" with inputs: ${JSON.stringify(inputValues)}`);
 
-      const response = await fetch(`${SERVER_URL}/api/execute/script`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          code,
-          inputs: inputValues,
-          timeout: 60000,
-        }),
-      });
+      // Execute via worker
+      const result = await activeWorkerClient.executeScript(code, inputValues, { timeout: 60000 });
+      
+      // Process result to match expected format
+      const processedSchematics: SchematicResult = {};
+      if (result.schematics) {
+        for (const [key, value] of Object.entries(result.schematics)) {
+           if (value instanceof Uint8Array || (typeof value === 'object' && value !== null && 'buffer' in value)) {
+             // Convert Uint8Array to base64
+             const bytes = value instanceof Uint8Array ? value : new Uint8Array((value as any).buffer);
+             let binary = '';
+             const len = bytes.byteLength;
+             for (let i = 0; i < len; i++) {
+               binary += String.fromCharCode(bytes[i]);
+             }
+             processedSchematics[key] = btoa(binary);
+           } else if (typeof value === 'string') {
+             processedSchematics[key] = value;
+           }
+        }
+      }
 
-      const result: ExecutionResult = await response.json();
-      setLastResult(result);
+      const executionResult: ExecutionResult = {
+        success: result.success,
+        result: result.result,
+        schematics: processedSchematics,
+        executionTime: result.executionTime,
+        error: result.error?.message,
+      };
 
-      if (result.success) {
+      setLastResult(executionResult);
+
+      if (executionResult.success) {
         // Mark code node as completed
-        setNodeExecutionStatus(primaryNode.id, 'completed', result.result);
+        setNodeExecutionStatus(primaryNode.id, 'completed', executionResult.result);
         
         addExecutionLog('[OK] Script executed successfully');
         
-        if (result.executionTime) {
-          addExecutionLog(`Completed in ${result.executionTime}ms`);
+        if (executionResult.executionTime) {
+          addExecutionLog(`Completed in ${executionResult.executionTime}ms`);
         }
 
-        if (result.schematics && Object.keys(result.schematics).length > 0) {
-          addExecutionLog(`[OK] Generated ${Object.keys(result.schematics).length} schematic(s)`);
+        if (Object.keys(processedSchematics).length > 0) {
+          addExecutionLog(`[OK] Generated ${Object.keys(processedSchematics).length} schematic(s)`);
         }
 
-        if (result.result) {
-          const resultKeys = Object.keys(result.result);
+        if (executionResult.result) {
+          const resultKeys = Object.keys(executionResult.result);
           addExecutionLog(`Output keys: ${resultKeys.join(', ')}`);
         }
       } else {
         // Mark code node as error
-        setNodeExecutionStatus(primaryNode.id, 'error', undefined, result.error);
-        addExecutionLog(`[ERROR] Execution failed: ${result.error}`);
+        setNodeExecutionStatus(primaryNode.id, 'error', undefined, executionResult.error);
+        addExecutionLog(`[ERROR] Execution failed: ${executionResult.error}`);
       }
     } catch (error) {
       const err = error as Error;

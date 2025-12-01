@@ -60,24 +60,7 @@ const SchematicRenderer = ({ schematic }: { schematic: SchematicWrapper }) => {
 
         if (!isInitialized || !renderer || !schematic) return;
 
-       let validSchematic: SchematicWrapper;
-  
-        if (!(schematic instanceof SchematicWrapper)) {
-            console.warn('Schematic is not a valid instance, attempting reconstruction');
-            
-            // Option A: If there's a static method to reconstruct
-            // validSchematic = SchematicWrapper.fromPointer(schematic.__wbg_ptr);
-            
-            // Option B: Set the prototype manually (risky but might work)
-            Object.setPrototypeOf(schematic, SchematicWrapper.prototype);
-            validSchematic = schematic as SchematicWrapper;
-        } else {
-            validSchematic = schematic;
-        }
-
-        console.log(validSchematic);
-
-        
+       
         setIsLoading(true);
         setError(null);
 
@@ -85,7 +68,7 @@ const SchematicRenderer = ({ schematic }: { schematic: SchematicWrapper }) => {
 
         try {
             console.log(`➡️ Loading schematic ${name} into renderer...`);
-            await renderer.schematicManager.loadSchematic(schematicId, validSchematic);
+            await renderer.schematicManager.loadSchematic(schematicId, schematic);
         } catch (loadError) {
             console.error(`❌ Failed to load schematic ${name}:`, loadError);
             setError(`Failed to load schematic: ${name}`);
