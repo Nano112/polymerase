@@ -25,6 +25,7 @@
     "@monaco-editor/react": "^4.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "schematic-renderer": "file:schematic-renderer-1.1.3.tgz",
     "server": "workspace:*",
     "shared": "workspace:*",
     "tailwind-merge": "^3.3.1",

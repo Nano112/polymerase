@@ -27,7 +27,7 @@ const DataEdge = memo(({
 }: EdgeProps) => {
   const nodeCache = useFlowStore((state) => state.nodeCache);
   const sourceCache = nodeCache[source];
-  
+
   const isReady = sourceCache?.status === 'completed';
   const isStale = sourceCache?.status === 'stale';
   const isRunning = sourceCache?.status === 'running';
@@ -44,10 +44,10 @@ const DataEdge = memo(({
   });
 
   // Determine edge color based on state
-  let strokeColor = 'var(--neutral-600)';
+  let strokeColor = '#525252';
   let strokeWidth = 2;
   let animated = false;
-  
+
   if (isReady) {
     strokeColor = '#22c55e'; // green-500
     strokeWidth = 2.5;
@@ -62,7 +62,7 @@ const DataEdge = memo(({
     strokeColor = '#ef4444'; // red-500
     strokeWidth = 2;
   }
-  
+
   if (selected) {
     strokeWidth = 3;
   }
@@ -80,7 +80,7 @@ const DataEdge = memo(({
         }}
         className={animated ? 'animated-edge' : ''}
       />
-      
+
       {/* Status indicator at midpoint */}
       {(isReady || isRunning || isError) && (
         <EdgeLabelRenderer>

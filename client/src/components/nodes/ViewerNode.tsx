@@ -1,17 +1,37 @@
-/**
- * ViewerNode - Generic data viewer that can display any input type
- * Optionally can relay data to an output
- */
-
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Eye, Box, Hash, Type, ToggleLeft, Code2, ArrowRight, Download } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 
+// Adjust these imports based on your actual file structure
+import { SchematicWrapper } from 'nucleation';
+import SchematicRenderer from '../others/SchematicRenderer';
+
 interface ViewerNodeData {
   label?: string;
-  passthrough?: boolean;  // Whether to relay input to output
+  passthrough?: boolean; // Whether to relay input to output
 }
+
+// --- 1. MEMOIZED RENDERER WRAPPER ---
+// This is critical. It prevents the 3D canvas from re-initializing 
+// every time React Flow updates the node position or selection.
+const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: SchematicWrapper }) => {
+  return (
+    <div className="w-full h-32 bg-neutral-950 rounded border border-neutral-800 overflow-hidden relative">
+      <SchematicRenderer schematic={schematic} name="viewer_preview" />
+    </div>
+  );
+}, (prev, next) => {
+  // Custom comparison: Only re-render if the internal WASM pointer changes.
+  // We check both standard locations for the pointer.
+  const prevPtr = (prev.schematic as any)?.__wbg_ptr || (prev.schematic as any)?.ptr;
+  const nextPtr = (next.schematic as any)?.__wbg_ptr || (next.schematic as any)?.ptr;
+  
+  // If both are undefined (e.g. null input), standard reference check
+  if (!prevPtr && !nextPtr) return prev.schematic === next.schematic;
+  
+  return prevPtr === nextPtr;
+});
 
 const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeData }) => {
   const selectNode = useFlowStore((state) => state.selectNode);
@@ -20,7 +40,7 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
   const edges = useFlowStore((state) => state.edges);
   const [isHovered, setIsHovered] = useState(false);
   
-  const cache = nodeCache[id];
+  // Get input data from the cache
   const inputEdge = edges.find(e => e.target === id);
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
   const inputValue = sourceCache?.output;
@@ -33,12 +53,21 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
     updateNodeData(id, { passthrough: !passthrough });
   }, [id, passthrough, updateNodeData]);
 
-  // Determine the type of input value
+  // Determine the type of input value safely
   const getValueType = (value: unknown): string => {
     if (value === null || value === undefined) return 'null';
     if (Array.isArray(value)) return 'array';
+    
+    // Check for WASM pointer or Class instance
+    const isWasmObject = value && typeof value === 'object' && '__wbg_ptr' in (value as any);
+    const isSchematicInstance = value instanceof SchematicWrapper;
+
+    if (isWasmObject || isSchematicInstance) {
+      return 'schematic';
+    }
+    
     if (typeof value === 'object') {
-      // Check for schematic-like object
+      // Check for schematic-like POJO (Plain Old JS Object)
       if ('blocks' in (value as object) || 'dimensions' in (value as object)) {
         return 'schematic';
       }
@@ -62,6 +91,22 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
   };
 
   const TypeIcon = getTypeIcon();
+
+  // Helper to safely read dimensions from WASM without crashing
+  const getSchematicDims = (val: any) => {
+    try {
+      if (val instanceof SchematicWrapper || (val && typeof val.get_dimensions === 'function')) {
+        const d = val.get_dimensions();
+        return { x: d[0], y: d[1], z: d[2] };
+      }
+    } catch (e) {
+      // WASM memory might be busy or invalid, ignore dimension read
+      return null;
+    }
+    // Fallback for POJOs
+    if (val?.dimensions) return val.dimensions;
+    return null;
+  };
 
   const renderPreview = () => {
     if (!hasInput || inputValue === undefined) {
@@ -88,8 +133,8 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         const strValue = String(inputValue);
         return (
           <div className="py-2">
-            <div className="text-sm font-mono text-green-400 break-all max-h-20 overflow-y-auto">
-              "{strValue.slice(0, 100)}{strValue.length > 100 ? '...' : ''}"
+            <div className="text-xs font-mono text-green-400 break-all max-h-20 overflow-y-auto whitespace-pre-wrap">
+              {strValue.slice(0, 150)}{strValue.length > 150 ? '...' : ''}
             </div>
             <div className="text-[10px] text-neutral-500 mt-1">string ({strValue.length} chars)</div>
           </div>
@@ -106,22 +151,18 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         );
 
       case 'schematic':
-        const schem = inputValue as { dimensions?: { x: number; y: number; z: number }; blockCount?: number };
+        const dims = getSchematicDims(inputValue);
         return (
-          <div className="py-2">
-            <div className="flex items-center justify-center mb-2">
-              <Box className="w-10 h-10 text-pink-400" />
+          <div className="py-2 w-full">
+            <div className="flex items-center justify-center mb-2 w-full">
+              {/* Using the Memoized Component here */}
+              <MemoizedSchematicRenderer schematic={inputValue as SchematicWrapper} />
             </div>
             <div className="text-center">
               <div className="text-xs text-neutral-300 font-medium">Schematic</div>
-              {schem.dimensions && (
+              {dims && (
                 <div className="text-[10px] text-neutral-500">
-                  {schem.dimensions.x}×{schem.dimensions.y}×{schem.dimensions.z}
-                </div>
-              )}
-              {schem.blockCount !== undefined && (
-                <div className="text-[10px] text-neutral-500">
-                  {schem.blockCount.toLocaleString()} blocks
+                  {dims.x}×{dims.y}×{dims.z}
                 </div>
               )}
             </div>
@@ -264,4 +305,3 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
 ViewerNode.displayName = 'ViewerNode';
 
 export default ViewerNode;
-
