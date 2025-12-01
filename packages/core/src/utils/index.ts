@@ -14,6 +14,8 @@ export {
 } from './vector.js';
 export { 
   initializeSchematicProvider, 
+  schematicDataToWrapper,
+  processInputSchematics,
   SchematicUtils,
   type SchematicWrapper, 
   type SchematicClass 

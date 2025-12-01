@@ -69,14 +69,65 @@ export function Editor() {
 
   const { executeScript, workerClient } = useLocalExecutor();
 
+  /**
+   * Get nodes in topological order for execution
+   * Returns nodes from inputs → code → viewers
+   */
+  const getExecutionOrder = useCallback((nodes: FlowNode[], edges: Edge[]): FlowNode[] => {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const inDegree = new Map<string, number>();
+    const adjacency = new Map<string, string[]>();
+    
+    // Initialize
+    for (const node of nodes) {
+      inDegree.set(node.id, 0);
+      adjacency.set(node.id, []);
+    }
+    
+    // Build graph
+    for (const edge of edges) {
+      const targets = adjacency.get(edge.source) || [];
+      targets.push(edge.target);
+      adjacency.set(edge.source, targets);
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    }
+    
+    // Kahn's algorithm
+    const queue: string[] = [];
+    for (const [nodeId, degree] of inDegree) {
+      if (degree === 0) queue.push(nodeId);
+    }
+    
+    const sorted: FlowNode[] = [];
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      const node = nodeMap.get(nodeId);
+      if (node) sorted.push(node);
+      
+      for (const neighbor of adjacency.get(nodeId) || []) {
+        const newDegree = (inDegree.get(neighbor) || 1) - 1;
+        inDegree.set(neighbor, newDegree);
+        if (newDegree === 0) queue.push(neighbor);
+      }
+    }
+    
+    return sorted;
+  }, []);
+
   const handleQuickRun = useCallback(async () => {
     setIsExecuting(true);
     clearExecutionLogs();
     addExecutionLog('Starting quick run...');
 
+    // Store outputs from each node for passing to downstream nodes
+    const nodeOutputs = new Map<string, Record<string, unknown>>();
+
     try {
-      // Find the code node
-      const codeNodes = nodes.filter(n => n.type === 'code');
+      // Get execution order (topological sort)
+      const executionOrder = getExecutionOrder(nodes, edges);
+      
+      // Find code nodes
+      const codeNodes = executionOrder.filter(n => n.type === 'code');
       
       if (codeNodes.length === 0) {
         addExecutionLog('[ERROR] No code node found');
@@ -84,84 +135,127 @@ export function Editor() {
         return;
       }
 
-      const primaryNode = codeNodes[0];
-      const code = primaryNode.data.code;
-
-      if (!code) {
-        addExecutionLog('[ERROR] Code node has no script');
-        setIsExecuting(false);
-        return;
-      }
-
-      // Gather inputs from connected nodes
-      const inputValues: Record<string, unknown> = {};
-      
-      // Get input nodes (non-constant ones)
-      const inputNodes = nodes.filter(n => 
-        n.type?.includes('input') && 
-        !n.type?.includes('schematic') &&
-        !n.data.isConstant
-      );
-
-      // Map inputs based on connections
-      for (const inputNode of inputNodes) {
-        const connectedEdge = edges.find(e => e.source === inputNode.id);
-        if (connectedEdge?.targetHandle) {
-          inputValues[connectedEdge.targetHandle] = inputNode.data.value;
-        }
-      }
-
       // Mark all nodes as pending
       for (const node of nodes) {
         setNodeExecutionStatus(node.id, 'pending');
       }
 
-      // Mark input nodes as completed immediately
-      for (const inputNode of nodes.filter(n => n.type?.includes('input'))) {
-        setNodeExecutionStatus(inputNode.id, 'completed', { default: inputNode.data.value });
-      }
+      // Process nodes in topological order
+      for (const node of executionOrder) {
+        // Handle input nodes - they just output their value
+        if (node.type?.includes('input') && !node.type?.includes('schematic')) {
+          const output = { default: node.data.value };
+          nodeOutputs.set(node.id, output);
+          setNodeExecutionStatus(node.id, 'completed', output);
+          continue;
+        }
 
-      // Mark code node as running
-      setExecutingNodeId(primaryNode.id);
-      setNodeExecutionStatus(primaryNode.id, 'running');
+        // Handle code nodes
+        if (node.type === 'code') {
+          const code = node.data.code;
+          
+          if (!code) {
+            addExecutionLog(`[WARN] Code node "${node.data.label || node.id}" has no script, skipping`);
+            setNodeExecutionStatus(node.id, 'error', undefined, 'No script');
+            continue;
+          }
 
-      addExecutionLog(`Executing "${primaryNode.data.label || 'Code'}" with inputs: ${JSON.stringify(inputValues)}`);
-
-      // Execute
-      const result = await executeScript(code, inputValues);
-
-      if (result.success) {
-        // Build final result with binary schematic data
-        let finalResult: Record<string, unknown>;
-        
-        if (result.schematics && Object.keys(result.schematics).length > 0) {
-          // If we have schematics, use binary data
-          if ('default' in result.schematics) {
-            // Direct return case: `return schem;` - use the binary as the result
-            finalResult = { default: result.schematics.default };
-          } else {
-            // Dictionary return case: `return { schem };`
-            finalResult = { ...result.result };
-            for (const [key, value] of Object.entries(result.schematics)) {
-              if (value) {
-                finalResult[key] = value;
+          // Gather inputs from connected upstream nodes
+          const inputValues: Record<string, unknown> = {};
+          const incomingEdges = edges.filter(e => e.target === node.id);
+          
+          for (const edge of incomingEdges) {
+            const sourceOutput = nodeOutputs.get(edge.source);
+            console.log('Edge:', edge.source, '->', edge.target, 'handles:', edge.sourceHandle, '->', edge.targetHandle);
+            console.log('Source output:', sourceOutput);
+            
+            if (sourceOutput) {
+              // Use the targetHandle as the input name
+              const inputName = edge.targetHandle || 'default';
+              // Try to get the value by sourceHandle, then by inputName, then 'default'
+              const outputKey = edge.sourceHandle || inputName;
+              let value = sourceOutput[outputKey];
+              
+              // If not found by outputKey, try to find a matching key or use 'default'
+              if (value === undefined) {
+                // Check if there's only one key in the output (common case)
+                const outputKeys = Object.keys(sourceOutput);
+                if (outputKeys.length === 1) {
+                  value = sourceOutput[outputKeys[0]];
+                } else {
+                  value = sourceOutput['default'];
+                }
               }
+              
+              console.log('Mapping input:', inputName, '=', value);
+              inputValues[inputName] = value;
             }
           }
-        } else {
-          // No schematics, use result as-is
-          finalResult = result.result || {};
+
+          // Mark as running
+          setExecutingNodeId(node.id);
+          setNodeExecutionStatus(node.id, 'running');
+          addExecutionLog(`Executing "${node.data.label || 'Code'}"...`);
+
+          // Execute
+          const result = await executeScript(code, inputValues);
+
+          if (result.success) {
+            // Build final result with binary schematic data
+            let finalResult: Record<string, unknown>;
+            
+            console.log('Execution result:', { 
+              result: result.result, 
+              schematics: result.schematics,
+              schematicKeys: result.schematics ? Object.keys(result.schematics) : []
+            });
+            
+            if (result.schematics && Object.keys(result.schematics).length > 0) {
+              // Build result using schematics (which have been serialized for transfer)
+              finalResult = {};
+              
+              // Add all schematics to the result
+              for (const [key, value] of Object.entries(result.schematics)) {
+                if (value) {
+                  finalResult[key] = value;
+                }
+              }
+              
+              // Also add 'default' pointing to first schematic if there's only one
+              if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                const firstKey = Object.keys(finalResult)[0];
+                finalResult['default'] = finalResult[firstKey];
+              }
+              
+              console.log('Final result with schematics:', finalResult);
+            } else {
+              finalResult = result.result || {};
+            }
+
+            nodeOutputs.set(node.id, finalResult);
+            setNodeExecutionStatus(node.id, 'completed', finalResult);
+            addExecutionLog(`[OK] "${node.data.label || 'Code'}" completed${result.executionTime ? ` in ${result.executionTime}ms` : ''}`);
+          } else {
+            setNodeExecutionStatus(node.id, 'error', undefined, result.error?.message);
+            addExecutionLog(`[ERROR] "${node.data.label || 'Code'}": ${result.error?.message}`);
+            // Stop execution on error
+            break;
+          }
         }
 
-        setNodeExecutionStatus(primaryNode.id, 'completed', finalResult);
-        addExecutionLog('[OK] Execution successful');
-        if (result.executionTime) {
-          addExecutionLog(`Completed in ${result.executionTime}ms`);
+        // Handle viewer nodes - they don't need execution, just receive data
+        if (node.type === 'viewer') {
+          const incomingEdge = edges.find(e => e.target === node.id);
+          if (incomingEdge) {
+            const sourceOutput = nodeOutputs.get(incomingEdge.source);
+            if (sourceOutput) {
+              setNodeExecutionStatus(node.id, 'completed', sourceOutput);
+            }
+          }
         }
-      } else {
-        setNodeExecutionStatus(primaryNode.id, 'error', undefined, result.error?.message);
-        addExecutionLog(`[ERROR] Execution failed: ${result.error?.message}`);
       }
+
+      addExecutionLog('[OK] Execution complete');
 
     } catch (error) {
       const err = error as Error;
@@ -174,7 +268,7 @@ export function Editor() {
       setIsExecuting(false);
       setExecutingNodeId(null);
     }
-  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript]);
+  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, getExecutionOrder]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstance.current = instance;

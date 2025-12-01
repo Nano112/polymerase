@@ -5,6 +5,7 @@
 
 import type { ExecutionResult, IODefinition } from '../types/index.js';
 import { EXECUTION_LIMITS } from '../utils/constants.js';
+import { processInputSchematics } from '../utils/schematic.js';
 
 export interface SynthaseOptions {
   timeout?: number;
@@ -97,10 +98,14 @@ export class SynthaseService {
 
     try {
       const startTime = performance.now();
+      
+      // Process inputs to convert SchematicData back to SchematicWrapper
+      // This allows scripts to receive WASM objects even when data was serialized for transfer
+      const processedInputs = await processInputSchematics(inputs);
 
       const synthase = await this.getSynthase();
 
-      const result = await synthase.execute(scriptContent, inputs, {
+      const result = await synthase.execute(scriptContent, processedInputs, {
         contextProviders: this.contextProviders,
         limits: {
           timeout,

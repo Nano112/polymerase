@@ -3,12 +3,15 @@
  * Uses nucleation SchematicWrapper for WASM-based schematic operations
  */
 
+import { isSchematicData, type SchematicData } from '../types/index.js';
+
 /**
  * Schematic wrapper interface (compatible with nucleation)
  */
 export interface SchematicWrapper {
   set_block(x: number, y: number, z: number, blockType?: string): void;
   get_block(x: number, y: number, z: number): string;
+  from_data(data: Uint8Array): void;
   to_schematic(): Uint8Array;
   to_litematic(): Uint8Array;
   size?: { x: number; y: number; z: number };
@@ -16,19 +19,96 @@ export interface SchematicWrapper {
 
 export type SchematicClass = new () => SchematicWrapper;
 
+// Cache the SchematicWrapper class once loaded
+let cachedSchematicClass: SchematicClass | null = null;
+
 /**
  * Asynchronously initializes the nucleation library and returns the SchematicWrapper class.
  * @returns The constructor for creating schematics.
  * @throws Error if nucleation WASM cannot be loaded
  */
 export async function initializeSchematicProvider(): Promise<SchematicClass> {
+  if (cachedSchematicClass) {
+    return cachedSchematicClass;
+  }
+  
   const nucleation = await import('nucleation');
   
   if (typeof nucleation.default === 'function') {
     await nucleation.default();
   }
   
-  return nucleation.SchematicWrapper as SchematicClass;
+  cachedSchematicClass = nucleation.SchematicWrapper as SchematicClass;
+  return cachedSchematicClass;
+}
+
+/**
+ * Convert SchematicData (serialized) back to SchematicWrapper (WASM object)
+ * This is used when passing schematics between scripts/nodes
+ */
+export async function schematicDataToWrapper(schematicData: SchematicData): Promise<SchematicWrapper> {
+  const SchematicClass = await initializeSchematicProvider();
+  const wrapper = new SchematicClass();
+  
+  // Get the binary data
+  let binaryData: Uint8Array;
+  if (schematicData.data instanceof Uint8Array) {
+    binaryData = schematicData.data;
+  } else if (typeof schematicData.data === 'string') {
+    // Handle base64 or other string encodings if needed
+    binaryData = new TextEncoder().encode(schematicData.data);
+  } else {
+    throw new Error('Invalid schematic data format');
+  }
+  
+  console.log('📦 Loading schematic from data:', {
+    format: schematicData.format,
+    dataLength: binaryData.byteLength,
+    firstBytes: Array.from(binaryData.slice(0, 8)),
+  });
+  
+  // Load the data into the wrapper
+  wrapper.from_data(binaryData);
+  
+  // Verify the schematic loaded correctly
+  try {
+    const dims = (wrapper as unknown as { get_dimensions?: () => number[] }).get_dimensions?.();
+    console.log('📦 Loaded schematic dimensions:', dims);
+  } catch (e) {
+    console.log('📦 Could not get dimensions (may be normal)');
+  }
+  
+  return wrapper;
+}
+
+/**
+ * Process inputs to convert any SchematicData to SchematicWrapper
+ * This allows scripts to receive WASM objects even when data was serialized for transfer
+ */
+export async function processInputSchematics(
+  inputs: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const processed: Record<string, unknown> = {};
+  
+  for (const [key, value] of Object.entries(inputs)) {
+    if (isSchematicData(value)) {
+      // Convert SchematicData to SchematicWrapper
+      processed[key] = await schematicDataToWrapper(value);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      // Check nested objects (but not arrays)
+      const nested = value as Record<string, unknown>;
+      const hasSchematicData = Object.values(nested).some(v => isSchematicData(v));
+      if (hasSchematicData) {
+        processed[key] = await processInputSchematics(nested);
+      } else {
+        processed[key] = value;
+      }
+    } else {
+      processed[key] = value;
+    }
+  }
+  
+  return processed;
 }
 
 /**
