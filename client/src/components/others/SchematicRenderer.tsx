@@ -77,14 +77,14 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             }
 
             await renderer.schematicManager?.loadSchematic(schematicId, dataToLoad);
+            
+            // Successfully loaded - stop loading state
+            setIsLoading(false);
         } catch (loadError) {
             console.error('❌ Failed to load schematic:', loadError);
             setError('Failed to load schematic');
+            setIsLoading(false);
         }
-
-
-
-
     }, [isInitialized, schematic]);
 
     // Handle canvas resize
@@ -116,17 +116,28 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
 
 
 
-    if (isLoading) {
-        return <div>Loading schematic...</div>;
-    }
     if (error) {
-        return <div>Error: {error}</div>;
+        return <div className="flex items-center justify-center h-full text-red-400 text-xs">Error: {error}</div>;
     }
+    
     return (
-        <canvas
-            ref={canvasRef}
-            style={{ width: '100%', height: '100%', border: '1px solid #ccc' }}
-        />
+        <div 
+            className="relative w-full h-full nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+        >
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/80 z-10">
+                    <span className="text-neutral-400 text-xs">Loading...</span>
+                </div>
+            )}
+            <canvas
+                ref={canvasRef}
+                style={{ width: '100%', height: '100%' }}
+            />
+        </div>
     );
 }
 

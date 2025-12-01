@@ -120,7 +120,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
     switch (widgetType) {
       case 'slider':
         return (
-          <div className="space-y-2">
+          <div className="space-y-2 nodrag nopan">
             <input
               type="range"
               value={Number(data.value) || 0}
@@ -147,7 +147,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
             max={data.max}
             step={data.step}
             onChange={(e) => handleValueChange(parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500"
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 nodrag"
             placeholder={data.placeholder || '0'}
           />
         );
@@ -157,7 +157,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
           <button
             onClick={() => handleValueChange(!data.value)}
             className={`
-              w-full py-2 rounded-lg text-sm font-medium transition-all duration-200
+              w-full py-2 rounded-lg text-sm font-medium transition-all duration-200 nodrag
               ${data.value 
                 ? 'bg-green-600 text-white hover:bg-green-500' 
                 : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
@@ -173,7 +173,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
           <select
             value={String(data.value ?? '')}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 nodrag"
           >
             {(data.options || []).map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
@@ -186,7 +186,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
           <textarea
             value={String(data.value ?? '')}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-none"
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-none nodrag"
             rows={3}
             placeholder={data.placeholder || 'Enter text...'}
           />
@@ -198,7 +198,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
             type="text"
             value={String(data.value ?? '')}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 nodrag"
             placeholder={data.placeholder || 'Enter value...'}
           />
         );

@@ -1,5 +1,5 @@
-import { memo, useState, useCallback } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { memo, useState, useCallback, useRef } from 'react';
+import { Handle, Position, type NodeProps, NodeResizer } from '@xyflow/react';
 import { Eye, Box, Hash, Type, ToggleLeft, Code2, ArrowRight, Download } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { isSchematicData, type SchematicData } from '@polymerase/core';
@@ -10,6 +10,8 @@ import SchematicRenderer from '../others/SchematicRenderer';
 interface ViewerNodeData {
   label?: string;
   passthrough?: boolean; // Whether to relay input to output
+  width?: number;
+  height?: number;
 }
 
 // --- 1. MEMOIZED RENDERER WRAPPER ---
@@ -17,7 +19,7 @@ interface ViewerNodeData {
 // every time React Flow updates the node position or selection.
 const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: Uint8Array | ArrayBuffer }) => {
   return (
-    <div className="w-full h-32 bg-neutral-950 rounded border border-neutral-800 overflow-hidden relative">
+    <div className="w-full h-full bg-neutral-950 rounded border border-neutral-800 overflow-hidden relative">
       <SchematicRenderer schematic={schematic} />
     </div>
   );
@@ -37,18 +39,25 @@ const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: Uint8Array |
   return true;
 });
 
-const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeData }) => {
+const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { data: ViewerNodeData }) => {
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNodeData = useFlowStore((state) => state.updateNodeData);
   const nodeCache = useFlowStore((state) => state.nodeCache);
   const edges = useFlowStore((state) => state.edges);
   const [isHovered, setIsHovered] = useState(false);
   
+  // Keep track of the last valid schematic so we can show it during re-execution
+  const lastSchematicRef = useRef<SchematicData | null>(null);
+  
+  // Check if node has been resized (has explicit dimensions)
+  const isResized = !!(width && height);
+  
   // Get input data from the cache
   const inputEdge = edges.find(e => e.target === id);
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
   const rawOutput = sourceCache?.output;
   const hasInput = inputEdge && sourceCache?.status === 'completed';
+  const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending';
   
   // Extract actual value - if output is an object with a single key containing SchematicData,
   // unwrap it for display. This handles cases like { default: SchematicData }
@@ -77,6 +86,15 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
     return rawOutput;
   })();
   
+  // Update last schematic ref when we have a valid schematic
+  if (isSchematicData(inputValue)) {
+    lastSchematicRef.current = inputValue;
+  }
+  
+  // Use the last known schematic if current value is not available but we had one before
+  const displayValue = inputValue ?? (lastSchematicRef.current ? lastSchematicRef.current : undefined);
+  const hasSchematicToShow = isSchematicData(displayValue);
+  
   const passthrough = data.passthrough ?? false;
 
   const togglePassthrough = useCallback((e: React.MouseEvent) => {
@@ -100,7 +118,9 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
     return typeof value;
   };
 
-  const valueType = hasInput ? getValueType(inputValue) : null;
+  // Determine value type - use displayValue to handle cached schematics
+  const valueType = hasInput ? getValueType(inputValue) : 
+    (hasSchematicToShow ? 'schematic' : null);
 
   const getTypeIcon = () => {
     switch (valueType) {
@@ -160,7 +180,8 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         );
 
       case 'schematic': {
-        const schematicWrapper = inputValue as SchematicData;
+        // Use displayValue which includes cached schematic when input is invalidated
+        const schematicWrapper = (isSchematicData(inputValue) ? inputValue : displayValue) as SchematicData;
         const binaryData = schematicWrapper.data instanceof Uint8Array 
           ? schematicWrapper.data 
           : new TextEncoder().encode(schematicWrapper.data as string);
@@ -168,18 +189,24 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         const name = schematicWrapper.metadata?.name || 'Schematic';
         
         return (
-          <div className="py-2 w-full">
-            <div className="flex items-center justify-center mb-2 w-full">
+          <div className="flex flex-col h-full w-full relative">
+            {/* Show overlay when re-executing */}
+            {isExecuting && (
+              <div className="absolute inset-0 bg-neutral-900/60 z-10 flex items-center justify-center rounded">
+                <div className="text-xs text-neutral-400 animate-pulse">Updating...</div>
+              </div>
+            )}
+            <div className="flex-1 min-h-0 w-full">
               {/* Using the Memoized Component here */}
               <MemoizedSchematicRenderer schematic={binaryData} />
             </div>
-            <div className="text-center">
+            <div className="text-center mt-2 flex-shrink-0">
               <div className="text-xs text-neutral-300 font-medium">{name}</div>
               <div className="text-[10px] text-neutral-500">
                 {schematicWrapper.format} • {byteSize} bytes
               </div>
             </div>
-            <button className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
+            <button className="mt-2 w-full flex-shrink-0 flex items-center justify-center gap-1 px-2 py-1 bg-pink-500/20 text-pink-400 rounded text-xs hover:bg-pink-500/30 transition-colors">
               <Download className="w-3 h-3" />
               Download
             </button>
@@ -226,20 +253,30 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
   };
 
   return (
-    <div
-      className={`
-        relative min-w-[180px] max-w-[240px] rounded-xl overflow-hidden
-        bg-neutral-900
-        border transition-all duration-200
-        ${selected 
-          ? 'border-pink-500/50 shadow-lg shadow-pink-500/10' 
-          : isHovered 
-            ? 'border-neutral-600/50' 
-            : hasInput
-              ? 'border-green-500/30'
-              : 'border-neutral-800/50'
-        }
-      `}
+    <>
+      {/* Resize handle - always available, visible on hover/select */}
+      <NodeResizer
+        minWidth={180}
+        minHeight={120}
+        isVisible={selected || isHovered}
+        lineClassName="!border-pink-500"
+        handleClassName="!w-2 !h-2 !bg-pink-500 !border-pink-600"
+      />
+      <div
+        className={`
+          relative rounded-xl overflow-hidden
+          bg-neutral-900 flex flex-col
+          border transition-all duration-200
+          ${isResized ? 'w-full h-full' : 'min-w-[180px] max-w-[240px]'}
+          ${selected 
+            ? 'border-pink-500/50 shadow-lg shadow-pink-500/10' 
+            : isHovered 
+              ? 'border-neutral-600/50' 
+              : hasInput
+                ? 'border-green-500/30'
+                : 'border-neutral-800/50'
+          }
+        `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => selectNode(id)}
@@ -286,7 +323,7 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
       </div>
 
       {/* Content */}
-      <div className="p-3">
+      <div className={`${isResized || valueType === 'schematic' ? 'flex-1 min-h-0 p-2' : 'p-3'}`}>
         {renderPreview()}
       </div>
 
@@ -314,6 +351,7 @@ const ViewerNode = memo(({ id, data, selected }: NodeProps & { data: ViewerNodeD
         />
       )}
     </div>
+    </>
   );
 });
 
