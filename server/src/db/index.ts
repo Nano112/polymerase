@@ -73,7 +73,7 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_schematics_execution_id ON schematics(execution_id);
   `);
 
-  console.log('📦 Database initialized at:', DB_PATH);
+  // Database initialized
 }
 
 /**

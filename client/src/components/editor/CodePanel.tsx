@@ -1,126 +1,90 @@
 /**
- * CodePanel - Monaco editor for code node scripts
+ * CodePanel - Monaco editor for code node scripts (Modal version)
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
+import { Zap, Info, ArrowRight } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 
-export function CodePanel() {
-  const { nodes, selectedNodeId, updateNodeData } = useFlowStore();
-  const [localCode, setLocalCode] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
+interface CodePanelProps {
+  nodeId: string;
+  onClose?: () => void;
+}
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  const isCodeNode = selectedNode?.type === 'code';
+export function CodePanel({ nodeId }: CodePanelProps) {
+  const { nodes, updateNodeData } = useFlowStore();
+  const [localCode, setLocalCode] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const node = nodes.find((n) => n.id === nodeId);
+  const isCodeNode = node?.type === 'code';
 
   useEffect(() => {
-    if (isCodeNode && selectedNode) {
-      setLocalCode(selectedNode.data.code || '');
-      setValidationError(null);
+    if (isCodeNode && node) {
+      setLocalCode(node.data.code || '');
+      setHasChanges(false);
     }
-  }, [selectedNodeId, isCodeNode, selectedNode]);
+  }, [nodeId, isCodeNode, node]);
 
   const handleCodeChange = useCallback(
     (value: string | undefined) => {
       const code = value || '';
       setLocalCode(code);
+      setHasChanges(true);
       
       // Debounced update to store
       const timer = setTimeout(() => {
-        if (selectedNodeId && isCodeNode) {
-          updateNodeData(selectedNodeId, { code });
-          // TODO: Validate script and update IO
+        if (nodeId && isCodeNode) {
+          updateNodeData(nodeId, { code });
+          setHasChanges(false);
         }
       }, 500);
 
       return () => clearTimeout(timer);
     },
-    [selectedNodeId, isCodeNode, updateNodeData]
+    [nodeId, isCodeNode, updateNodeData]
   );
 
-  if (!selectedNode) {
+  if (!node || !isCodeNode) {
     return (
-      <div className="h-full flex items-center justify-center text-slate-500">
+      <div className="h-full flex items-center justify-center text-neutral-500 p-8">
         <div className="text-center">
-          <div className="text-4xl mb-2">📝</div>
-          <p>Select a node to edit</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isCodeNode) {
-    return (
-      <div className="h-full flex flex-col p-4">
-        <h3 className="text-lg font-semibold text-white mb-4">
-          {selectedNode.data.label || selectedNode.type}
-        </h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Label</label>
-            <input
-              type="text"
-              value={selectedNode.data.label || ''}
-              onChange={(e) => updateNodeData(selectedNodeId!, { label: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
-            />
-          </div>
-
-          {selectedNode.type?.includes('input') && (
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Default Value</label>
-              <input
-                type={selectedNode.type === 'number_input' ? 'number' : 'text'}
-                value={selectedNode.data.value as string ?? ''}
-                onChange={(e) => updateNodeData(selectedNodeId!, { 
-                  value: selectedNode.type === 'number_input' 
-                    ? parseFloat(e.target.value) || 0 
-                    : e.target.value 
-                })}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
-              />
-            </div>
-          )}
-
-          <div className="pt-4 border-t border-slate-700">
-            <p className="text-xs text-slate-500">
-              Node ID: <code className="text-slate-400">{selectedNode.id}</code>
-            </p>
-            <p className="text-xs text-slate-500">
-              Type: <code className="text-slate-400">{selectedNode.type}</code>
-            </p>
-          </div>
+          <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p>Node not found or not a code node</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <span className="text-emerald-500">⚡</span>
-          <input
-            type="text"
-            value={selectedNode.data.label || ''}
-            onChange={(e) => updateNodeData(selectedNodeId!, { label: e.target.value })}
-            className="bg-transparent text-white font-medium focus:outline-none border-b border-transparent focus:border-slate-600"
-            placeholder="Node label..."
-          />
+    <div className="flex flex-col h-[70vh]">
+      {/* Header info */}
+      <div className="px-6 py-4 border-b border-neutral-800/50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-500/10 border border-green-500/20">
+            <Zap className="w-5 h-5 text-green-400" />
+          </div>
+          <div>
+            <input
+              type="text"
+              value={node.data.label || ''}
+              onChange={(e) => updateNodeData(nodeId, { label: e.target.value })}
+              className="bg-transparent text-white font-semibold focus:outline-none border-b border-transparent focus:border-neutral-600 text-lg"
+              placeholder="Node label..."
+            />
+          </div>
         </div>
         
-        {validationError && (
-          <span className="text-xs text-red-400 px-2 py-1 bg-red-500/10 rounded">
-            {validationError}
+        {hasChanges && (
+          <span className="text-xs text-amber-400 px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20">
+            Unsaved changes
           </span>
         )}
       </div>
 
       {/* Monaco Editor */}
-      <div className="flex-1">
+      <div className="flex-1 border-b border-neutral-800/50">
         <Editor
           height="100%"
           defaultLanguage="javascript"
@@ -135,30 +99,57 @@ export function CodePanel() {
             automaticLayout: true,
             tabSize: 2,
             wordWrap: 'on',
-            padding: { top: 12, bottom: 12 },
+            padding: { top: 16, bottom: 16 },
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
             fontLigatures: true,
+            renderLineHighlight: 'line',
+            cursorBlinking: 'smooth',
+            smoothScrolling: true,
           }}
         />
       </div>
 
+      {/* Tips Section */}
+      <div className="p-4 bg-neutral-900/50">
+        <div className="p-4 rounded-xl border border-green-500/20 bg-green-900/10">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-4 h-4 text-green-400" />
+            <span className="text-sm font-medium text-green-100">Quick Tips</span>
+          </div>
+          <div className="space-y-2 text-xs text-green-200/70">
+            <div className="flex items-start gap-2">
+              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+              <span>Use <code className="px-1 rounded bg-green-500/20 text-green-300">context.Schematic</code> to create schematics</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+              <span>Export values with <code className="px-1 rounded bg-green-500/20 text-green-300">export const result = ...</code></span>
+            </div>
+            <div className="flex items-start gap-2">
+              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+              <span>Use <code className="px-1 rounded bg-green-500/20 text-green-300">Logger.info()</code> for debugging</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* IO Preview */}
-      {selectedNode.data.io && (
-        <div className="px-4 py-3 border-t border-slate-700 bg-slate-900/50">
-          <div className="flex gap-4 text-xs">
-            {Object.keys(selectedNode.data.io.inputs || {}).length > 0 && (
+      {node.data.io && (
+        <div className="px-6 py-4 border-t border-neutral-800/50">
+          <div className="flex gap-6 text-sm">
+            {Object.keys(node.data.io.inputs || {}).length > 0 && (
               <div>
-                <span className="text-blue-400">Inputs:</span>{' '}
-                <span className="text-slate-400">
-                  {Object.keys(selectedNode.data.io.inputs).join(', ')}
+                <span className="text-blue-400 font-medium">Inputs:</span>{' '}
+                <span className="text-neutral-400">
+                  {Object.keys(node.data.io.inputs).join(', ')}
                 </span>
               </div>
             )}
-            {Object.keys(selectedNode.data.io.outputs || {}).length > 0 && (
+            {Object.keys(node.data.io.outputs || {}).length > 0 && (
               <div>
-                <span className="text-amber-400">Outputs:</span>{' '}
-                <span className="text-slate-400">
-                  {Object.keys(selectedNode.data.io.outputs).join(', ')}
+                <span className="text-amber-400 font-medium">Outputs:</span>{' '}
+                <span className="text-neutral-400">
+                  {Object.keys(node.data.io.outputs).join(', ')}
                 </span>
               </div>
             )}
@@ -168,4 +159,3 @@ export function CodePanel() {
     </div>
   );
 }
-

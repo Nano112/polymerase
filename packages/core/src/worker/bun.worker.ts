@@ -36,5 +36,5 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   }
 };
 
-console.log('🔧 Polymerase Bun Worker initialized');
+// Worker initialized
 

@@ -13,7 +13,7 @@ export class MockSchematic {
   private _size: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
 
   constructor() {
-    console.log('📦 Mock Schematic created (nucleation WASM not available)');
+    // Mock schematic - nucleation WASM not available
   }
 
   set_block(x: number, y: number, z: number, blockType = 'minecraft:air'): void {
@@ -44,7 +44,6 @@ export class MockSchematic {
    * Mock the to_schematic method that the real SchematicWrapper would have.
    */
   to_schematic(): Uint8Array {
-    console.warn('⚠️ Using mock schematic conversion (nucleation not available)');
     const mockSchematicData = {
       format: 'mock',
       warning: 'This is a mock schematic - nucleation was not available.',
@@ -118,25 +117,18 @@ function hasWasmSupport(): boolean {
  */
 export async function initializeSchematicProvider(): Promise<SchematicClass> {
   if (!hasWasmSupport()) {
-    console.warn('🔄 WebAssembly not supported, using mock Schematic implementation.');
     return MockSchematic as unknown as SchematicClass;
   }
 
   try {
-    // Dynamic import of nucleation
     const nucleation = await import('nucleation');
     
-    // Initialize the WASM module
     if (typeof nucleation.default === 'function') {
       await nucleation.default();
     }
     
-    console.log('✅ Nucleation initialized, using real SchematicWrapper.');
     return nucleation.SchematicWrapper as SchematicClass;
-  } catch (error) {
-    const err = error as Error;
-    console.error('❌ Nucleation initialization failed:', err.message);
-    console.warn('🔄 Falling back to mock Schematic implementation.');
+  } catch {
     return MockSchematic as unknown as SchematicClass;
   }
 }

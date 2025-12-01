@@ -4,6 +4,7 @@
 
 import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Hash, Type, ToggleLeft } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 
 interface InputNodeData {
@@ -18,6 +19,7 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
   const [localValue, setLocalValue] = useState<string | number | boolean>(
     (data.value as string | number | boolean) ?? ''
   );
+  const [isHovered, setIsHovered] = useState(false);
 
   const handleChange = useCallback(
     (newValue: string | number | boolean) => {
@@ -37,7 +39,7 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
             type="number"
             value={localValue as number}
             onChange={(e) => handleChange(parseFloat(e.target.value) || 0)}
-            className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white text-sm focus:outline-none focus:border-violet-500"
+            className="w-full px-3 py-2 bg-neutral-950/50 border border-neutral-700/50 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
           />
         );
       case 'boolean':
@@ -45,10 +47,10 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
           <button
             onClick={() => handleChange(!localValue)}
             className={`
-              w-full px-3 py-1 rounded text-sm font-medium transition-colors
+              w-full px-3 py-2 rounded-lg text-sm font-medium transition-all
               ${localValue 
-                ? 'bg-emerald-600 text-white' 
-                : 'bg-slate-700 text-slate-400'
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                : 'bg-neutral-800/50 text-neutral-400 border border-neutral-700/50'
               }
             `}
           >
@@ -61,7 +63,7 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
             type="text"
             value={localValue as string}
             onChange={(e) => handleChange(e.target.value)}
-            className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white text-sm focus:outline-none focus:border-violet-500"
+            className="w-full px-3 py-2 bg-neutral-950/50 border border-neutral-700/50 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
             placeholder="Enter value..."
           />
         );
@@ -70,27 +72,38 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
 
   const getIcon = () => {
     switch (inputType) {
-      case 'number': return '🔢';
-      case 'boolean': return '⚡';
-      default: return '📝';
+      case 'number': return Hash;
+      case 'boolean': return ToggleLeft;
+      default: return Type;
     }
   };
+
+  const Icon = getIcon();
 
   return (
     <div
       className={`
-        relative min-w-[160px] rounded-lg overflow-hidden
-        bg-gradient-to-br from-slate-900 to-slate-800
-        border-2 transition-all duration-200
-        ${selected ? 'border-violet-500 shadow-lg shadow-violet-500/20' : 'border-slate-700'}
+        relative min-w-[180px] rounded-xl overflow-hidden
+        bg-neutral-900/80 backdrop-blur-sm
+        border transition-all duration-200
+        ${selected 
+          ? 'border-purple-500/50 shadow-lg shadow-purple-500/10' 
+          : isHovered 
+            ? 'border-neutral-600/50' 
+            : 'border-neutral-800/50'
+        }
       `}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={() => selectNode(id)}
     >
       {/* Header */}
-      <div className="px-3 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white">
+      <div className="px-4 py-3 bg-gradient-to-r from-purple-900/30 to-neutral-900/50 border-b border-neutral-800/50">
         <div className="flex items-center gap-2">
-          <span className="text-sm">{getIcon()}</span>
-          <span className="font-medium text-sm truncate">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/20">
+            <Icon className="w-4 h-4 text-purple-400" />
+          </div>
+          <span className="font-medium text-sm text-white truncate">
             {data.label || 'Input'}
           </span>
         </div>
@@ -105,7 +118,7 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-amber-500 !border-2 !border-slate-900"
+        className="!w-3 !h-3 !bg-amber-500 !border-2 !border-neutral-900"
         title="Value"
       />
     </div>
@@ -115,4 +128,3 @@ const InputNode = memo(({ id, data, selected }: NodeProps & { data: InputNodeDat
 InputNode.displayName = 'InputNode';
 
 export default InputNode;
-

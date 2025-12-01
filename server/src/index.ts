@@ -44,4 +44,12 @@ export const app = new Hono()
 // Export for Hono client type inference
 export type AppType = typeof app;
 
-export default app;
+// Bun server configuration
+const port = Number(process.env.PORT) || 3001;
+
+console.log(`Polymerase Server starting on http://localhost:${port}`);
+
+export default {
+  port,
+  fetch: app.fetch,
+};

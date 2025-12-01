@@ -263,7 +263,7 @@ export class BunWorkerClient {
     }
 
     try {
-      console.log('🛑 Terminating Bun worker for cancellation...');
+      // Terminating worker for cancellation
 
       const oldWorker = this.worker;
       this.state = WORKER_STATES.INITIALIZING;
@@ -278,7 +278,7 @@ export class BunWorkerClient {
 
       if (oldWorker) {
         oldWorker.terminate();
-        console.log('✅ Bun worker terminated');
+        // Worker terminated
       }
 
       this.emit('executionCancelled', { forced: true });

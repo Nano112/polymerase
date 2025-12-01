@@ -265,7 +265,7 @@ export class WorkerClient {
     }
 
     try {
-      console.log('🛑 Terminating worker for cancellation...');
+      // Terminating worker for cancellation
 
       const oldWorker = this.worker;
       this.state = WORKER_STATES.INITIALIZING;
@@ -275,7 +275,7 @@ export class WorkerClient {
       if (oldWorker) {
         oldWorker.terminate();
         await new Promise((resolve) => setTimeout(resolve, 100));
-        console.log('✅ Worker terminated');
+        // Worker terminated
       }
 
       this.emit('executionCancelled', { forced: true });

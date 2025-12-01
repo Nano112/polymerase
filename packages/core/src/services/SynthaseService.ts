@@ -44,7 +44,6 @@ export class SynthaseService {
    */
   constructor(contextProviders: ContextProviders = {}) {
     this.contextProviders = contextProviders;
-    console.log('🔧 SynthaseService created with context providers:', Object.keys(contextProviders));
   }
 
   /**
@@ -96,7 +95,6 @@ export class SynthaseService {
 
     try {
       const startTime = performance.now();
-      console.log('🚀 Executing script with Synthase...');
 
       const synthase = await this.getSynthase();
 
@@ -110,14 +108,12 @@ export class SynthaseService {
       });
 
       const executionTime = Math.round(performance.now() - startTime);
-      console.log(`✅ Synthase execution completed in ${executionTime}ms`);
 
       // Find any returned values that are schematics
       const schematics: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(result)) {
         if (this.isSchematicWrapper(value)) {
           schematics[key] = value;
-          console.log(`📦 Found schematic output: ${key}`);
         }
       }
 
@@ -130,7 +126,6 @@ export class SynthaseService {
       };
     } catch (error) {
       const err = error as Error;
-      console.error('❌ Synthase execution failed:', err);
       return {
         success: false,
         error: {
@@ -148,15 +143,11 @@ export class SynthaseService {
    */
   async validateScript(scriptContent: string): Promise<ValidationResult> {
     try {
-      console.log('🔍 Validating script with Synthase...');
-      
       const synthase = await this.getSynthase();
       
       const validation = await synthase.validate(scriptContent, {
         contextProviders: this.contextProviders,
       });
-
-      console.log('✅ Script validation successful');
       
       return {
         valid: true,
@@ -165,7 +156,6 @@ export class SynthaseService {
       };
     } catch (error) {
       const err = error as Error;
-      console.error('❌ Script validation failed:', err);
       return {
         valid: false,
         error: err.message,
@@ -179,15 +169,11 @@ export class SynthaseService {
    */
   async createReusableExecutor(scriptContent: string): Promise<{ success: boolean; executor?: ReusableExecutor; error?: string }> {
     try {
-      console.log('🔄 Creating reusable Synthase executor...');
-      
       const synthase = await this.getSynthase();
       
       const reusable = await synthase.createReusable(scriptContent, {
         contextProviders: this.contextProviders,
       });
-
-      console.log('✅ Reusable executor created');
       
       return {
         success: true,
@@ -195,7 +181,6 @@ export class SynthaseService {
       };
     } catch (error) {
       const err = error as Error;
-      console.error('❌ Failed to create reusable executor:', err);
       return {
         success: false,
         error: err.message,

@@ -81,9 +81,6 @@ export class MessageHandler {
     }
 
     try {
-      console.log('🚀 Initializing Synthase Service in worker...');
-
-      // Create context providers with callbacks
       const contextProviders = await createContextProviders({
         logCallback: (entry) => {
           this.postProgress(`Log: ${entry.message}`, undefined, entry);
@@ -94,11 +91,8 @@ export class MessageHandler {
         customProviders: payload.customContextProviders || {},
       });
 
-      // Create the service
       this.synthaseService = new SynthaseService(contextProviders);
       this.isInitialized = true;
-
-      console.log('✅ Synthase Service initialized in worker');
 
       return {
         status: 'initialized',
@@ -106,7 +100,6 @@ export class MessageHandler {
       };
     } catch (error) {
       const err = error as Error;
-      console.error('❌ Worker initialization failed:', err);
       throw new Error(`Worker initialization failed: ${err.message}`);
     }
   }

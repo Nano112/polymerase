@@ -52,5 +52,5 @@ self.onunhandledrejection = function (event: PromiseRejectionEvent) {
   });
 };
 
-console.log('🔧 Polymerase Worker initialized');
+// Worker initialized
 
