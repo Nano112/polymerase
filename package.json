@@ -1,0 +1,46 @@
+{
+  "name": "polymerase",
+  "version": "0.5.0",
+  "description": "A node-based Minecraft schematic execution engine",
+  "author": "Harrison",
+  "license": "MIT",
+  "packageManager": "bun@1.2.4",
+  "workspaces": [
+    "./server",
+    "./client",
+    "./shared",
+    "./packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:client": "turbo dev --filter=client",
+    "dev:server": "turbo dev --filter=server",
+    "dev:core": "turbo dev --filter=@polymerase/core",
+    "build": "turbo build",
+    "build:client": "turbo build --filter=client",
+    "build:server": "turbo build --filter=server",
+    "build:core": "turbo build --filter=@polymerase/core",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "test": "turbo test",
+    "postinstall": "turbo build --filter=@polymerase/core --filter=shared --filter=server"
+  },
+  "keywords": [
+    "bun",
+    "hono",
+    "react",
+    "vite",
+    "monorepo",
+    "turbo"
+  ],
+  "devDependencies": {
+    "bun-types": "latest",
+    "turbo": "^2.5.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "hono": "^4.10.7"
+  }
+}

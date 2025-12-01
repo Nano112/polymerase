@@ -1,0 +1,255 @@
+/**
+ * SynthaseService - Core execution service for Synthase scripts
+ * Works in both browser and Node/Bun environments
+ */
+
+import type { ExecutionResult, IODefinition } from '../types/index.js';
+import { EXECUTION_LIMITS } from '../utils/constants.js';
+
+export interface SynthaseOptions {
+  timeout?: number;
+  maxRecursionDepth?: number;
+  maxImportedScripts?: number;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  io?: IODefinition;
+  dependencies?: string[];
+  error?: string;
+}
+
+export interface ReusableExecutor {
+  execute: (inputs?: Record<string, unknown>) => Promise<ExecutionResult>;
+  io: IODefinition;
+}
+
+/**
+ * Context providers available to scripts
+ */
+export type ContextProviders = Record<string, unknown>;
+
+/**
+ * SynthaseService handles script execution and validation
+ * using the Synthase sandboxed JavaScript engine
+ */
+export class SynthaseService {
+  private contextProviders: ContextProviders;
+  private synthaseModule: SynthaseModule | null = null;
+  private initialized = false;
+
+  /**
+   * Create a new SynthaseService
+   * @param contextProviders - Pre-assembled object of tools to provide to scripts
+   */
+  constructor(contextProviders: ContextProviders = {}) {
+    this.contextProviders = contextProviders;
+    console.log('🔧 SynthaseService created with context providers:', Object.keys(contextProviders));
+  }
+
+  /**
+   * Lazily load the synthase module
+   */
+  private async getSynthase(): Promise<SynthaseModule> {
+    if (this.synthaseModule) {
+      return this.synthaseModule;
+    }
+
+    try {
+      const synthase = await import('synthase');
+      this.synthaseModule = synthase as SynthaseModule;
+      this.initialized = true;
+      return this.synthaseModule;
+    } catch (error) {
+      throw new Error(`Failed to load synthase module: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Check if schematic wrapper is a valid schematic output
+   */
+  private isSchematicWrapper(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    
+    // Check for SchematicWrapper methods
+    const obj = value as Record<string, unknown>;
+    return typeof obj.to_schematic === 'function' || 
+           typeof obj.set_block === 'function';
+  }
+
+  /**
+   * Execute a synthase script with given inputs
+   * @param scriptContent - The script code
+   * @param inputs - Input parameters
+   * @param options - Execution options
+   */
+  async executeScript(
+    scriptContent: string,
+    inputs: Record<string, unknown> = {},
+    options: SynthaseOptions = {}
+  ): Promise<ExecutionResult> {
+    const {
+      timeout = EXECUTION_LIMITS.DEFAULT_TIMEOUT,
+      maxRecursionDepth = EXECUTION_LIMITS.MAX_RECURSION_DEPTH,
+      maxImportedScripts = EXECUTION_LIMITS.MAX_IMPORTED_SCRIPTS,
+    } = options;
+
+    try {
+      const startTime = performance.now();
+      console.log('🚀 Executing script with Synthase...');
+
+      const synthase = await this.getSynthase();
+
+      const result = await synthase.execute(scriptContent, inputs, {
+        contextProviders: this.contextProviders,
+        limits: {
+          timeout,
+          maxRecursionDepth,
+          maxImportedScripts,
+        },
+      });
+
+      const executionTime = Math.round(performance.now() - startTime);
+      console.log(`✅ Synthase execution completed in ${executionTime}ms`);
+
+      // Find any returned values that are schematics
+      const schematics: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(result)) {
+        if (this.isSchematicWrapper(value)) {
+          schematics[key] = value;
+          console.log(`📦 Found schematic output: ${key}`);
+        }
+      }
+
+      return {
+        success: true,
+        result,
+        schematics: schematics as ExecutionResult['schematics'],
+        hasSchematic: Object.keys(schematics).length > 0,
+        executionTime,
+      };
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Synthase execution failed:', err);
+      return {
+        success: false,
+        error: {
+          message: err.message,
+          type: err.name || 'SynthaseExecutionError',
+          stack: err.stack,
+        },
+      };
+    }
+  }
+
+  /**
+   * Validate a script without executing it
+   * @param scriptContent - The script code to validate
+   */
+  async validateScript(scriptContent: string): Promise<ValidationResult> {
+    try {
+      console.log('🔍 Validating script with Synthase...');
+      
+      const synthase = await this.getSynthase();
+      
+      const validation = await synthase.validate(scriptContent, {
+        contextProviders: this.contextProviders,
+      });
+
+      console.log('✅ Script validation successful');
+      
+      return {
+        valid: true,
+        io: validation.io as IODefinition,
+        dependencies: validation.dependencies || [],
+      };
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Script validation failed:', err);
+      return {
+        valid: false,
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Create a reusable script executor for performance
+   * @param scriptContent - The script code
+   */
+  async createReusableExecutor(scriptContent: string): Promise<{ success: boolean; executor?: ReusableExecutor; error?: string }> {
+    try {
+      console.log('🔄 Creating reusable Synthase executor...');
+      
+      const synthase = await this.getSynthase();
+      
+      const reusable = await synthase.createReusable(scriptContent, {
+        contextProviders: this.contextProviders,
+      });
+
+      console.log('✅ Reusable executor created');
+      
+      return {
+        success: true,
+        executor: reusable as unknown as ReusableExecutor,
+      };
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Failed to create reusable executor:', err);
+      return {
+        success: false,
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Get the current context providers
+   */
+  getContextProviders(): ContextProviders {
+    return { ...this.contextProviders };
+  }
+
+  /**
+   * Add or update context providers
+   */
+  setContextProviders(providers: ContextProviders): void {
+    this.contextProviders = { ...this.contextProviders, ...providers };
+  }
+
+  /**
+   * Check if the service is initialized
+   */
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+}
+
+// Type definitions for synthase module (since it may not have types)
+interface SynthaseModule {
+  execute: (
+    code: string,
+    inputs: Record<string, unknown>,
+    options: {
+      contextProviders: ContextProviders;
+      limits?: {
+        timeout?: number;
+        maxRecursionDepth?: number;
+        maxImportedScripts?: number;
+      };
+    }
+  ) => Promise<Record<string, unknown>>;
+  
+  validate: (
+    code: string,
+    options: { contextProviders: ContextProviders }
+  ) => Promise<{ io: unknown; dependencies?: string[] }>;
+  
+  createReusable: (
+    code: string,
+    options: { contextProviders: ContextProviders }
+  ) => Promise<unknown>;
+}
+
+export default SynthaseService;
+

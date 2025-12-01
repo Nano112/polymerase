@@ -1,0 +1,290 @@
+/**
+ * Execution API routes
+ */
+
+import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
+import { db, flows, executions, schematics, type NewExecution, type NewSchematic } from '../db/index.js';
+import type { FlowData } from '@polymerase/core';
+
+// Lazy import for the engine to allow optional dependency
+let PolymeraseEngine: typeof import('@polymerase/core').PolymeraseEngine;
+let createContextProviders: typeof import('@polymerase/core').createContextProviders;
+
+async function loadEngine() {
+  if (!PolymeraseEngine) {
+    const core = await import('@polymerase/core');
+    PolymeraseEngine = core.PolymeraseEngine;
+    createContextProviders = core.createContextProviders;
+  }
+}
+
+const executeRouter = new Hono();
+
+/**
+ * POST /api/execute - Execute a flow (JSON body)
+ */
+executeRouter.post('/', async (c) => {
+  try {
+    await loadEngine();
+    
+    const body = await c.req.json();
+    const { flowData, flowId } = body;
+
+    let flow: FlowData;
+
+    // Either use provided flowData or load from database
+    if (flowData) {
+      flow = flowData;
+    } else if (flowId) {
+      const storedFlow = await db.select().from(flows).where(eq(flows.id, flowId)).get();
+      if (!storedFlow) {
+        return c.json({ success: false, error: 'Flow not found' }, 404);
+      }
+      flow = JSON.parse(storedFlow.jsonContent);
+    } else {
+      return c.json({ success: false, error: 'Either flowData or flowId is required' }, 400);
+    }
+
+    // Create execution record
+    const executionId = crypto.randomUUID();
+    const now = new Date();
+
+    const newExecution: NewExecution = {
+      id: executionId,
+      flowId: flow.id,
+      status: 'running',
+      startedAt: now,
+    };
+
+    await db.insert(executions).values(newExecution);
+
+    // Set up the engine with context providers
+    const contextProviders = await createContextProviders({
+      logCallback: (entry) => {
+        console.log(`[${entry.level}] ${entry.message}`);
+      },
+    });
+
+    const engine = new PolymeraseEngine({
+      contextProviders,
+      timeout: 60000,
+    });
+
+    // Track logs
+    const logs: string[] = [];
+    engine.events.on('node:start', (e) => logs.push(`▶ Node ${e.nodeId} started`));
+    engine.events.on('node:finish', (e) => logs.push(`✓ Node ${e.nodeId} finished`));
+    engine.events.on('node:error', (e) => logs.push(`✗ Node ${e.nodeId} error: ${e.error.message}`));
+    engine.events.on('progress', (e) => logs.push(`📊 ${e.message}`));
+
+    // Execute the flow
+    const result = await engine.executeFlow(flow);
+
+    // Update execution record
+    await db.update(executions)
+      .set({
+        status: result.status,
+        completedAt: new Date(),
+        result: JSON.stringify(result),
+        error: result.status === 'error' 
+          ? Object.values(result.nodeStates).find(s => s.error)?.error?.message 
+          : null,
+      })
+      .where(eq(executions.id, executionId));
+
+    // Save any generated schematics
+    if (result.finalOutput) {
+      for (const [key, value] of Object.entries(result.finalOutput)) {
+        if (value instanceof Uint8Array || ArrayBuffer.isView(value)) {
+          const schematicId = crypto.randomUUID();
+          const newSchematic: NewSchematic = {
+            id: schematicId,
+            name: key,
+            flowId: flow.id,
+            executionId,
+            format: 'litematic', // Default format
+            data: Buffer.from(value as Uint8Array).toString('base64'),
+            createdAt: new Date(),
+          };
+          await db.insert(schematics).values(newSchematic);
+        }
+      }
+    }
+
+    // Clean up
+    engine.destroy();
+
+    return c.json({
+      success: result.status === 'completed',
+      executionId,
+      status: result.status,
+      logs,
+      result: result.finalOutput,
+      executionTime: result.endTime ? result.endTime - result.startTime : null,
+    });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error('Execution error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/**
+ * POST /api/execute/script - Execute a single script (not a full flow)
+ */
+executeRouter.post('/script', async (c) => {
+  try {
+    await loadEngine();
+    
+    const body = await c.req.json();
+    const { code, inputs = {}, timeout = 60000 } = body;
+
+    if (!code) {
+      return c.json({ success: false, error: 'Code is required' }, 400);
+    }
+
+    // Set up the engine
+    const contextProviders = await createContextProviders({
+      logCallback: (entry) => {
+        console.log(`[${entry.level}] ${entry.message}`);
+      },
+    });
+
+    const engine = new PolymeraseEngine({
+      contextProviders,
+      timeout,
+    });
+
+    // Execute the script
+    const result = await engine.executeScript(code, inputs);
+
+    // Clean up
+    engine.destroy();
+
+    // Process result
+    let processedResult = result.result;
+    let schematicData = null;
+
+    if (result.hasSchematic && result.schematics) {
+      schematicData = {};
+      for (const [key, schem] of Object.entries(result.schematics)) {
+        if (schem && (schem instanceof Uint8Array || ArrayBuffer.isView(schem))) {
+          const bytes = schem instanceof Uint8Array ? schem : new Uint8Array((schem as ArrayBufferView).buffer);
+          (schematicData as Record<string, string>)[key] = Buffer.from(bytes).toString('base64');
+        }
+      }
+    }
+
+    return c.json({
+      success: result.success,
+      result: processedResult,
+      schematics: schematicData,
+      executionTime: result.executionTime,
+      error: result.error?.message,
+    });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error('Script execution error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/**
+ * POST /api/execute/validate - Validate a script
+ */
+executeRouter.post('/validate', async (c) => {
+  try {
+    await loadEngine();
+    
+    const body = await c.req.json();
+    const { code } = body;
+
+    if (!code) {
+      return c.json({ success: false, error: 'Code is required' }, 400);
+    }
+
+    const contextProviders = await createContextProviders();
+    const engine = new PolymeraseEngine({ contextProviders });
+
+    const validation = await engine.validateScript(code);
+    engine.destroy();
+
+    return c.json({
+      success: true,
+      valid: validation.valid,
+      io: validation.io,
+      dependencies: validation.dependencies,
+      error: validation.error,
+    });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error('Validation error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/**
+ * GET /api/executions - List executions (optionally filtered by flowId)
+ */
+executeRouter.get('/executions', async (c) => {
+  try {
+    const flowId = c.req.query('flowId');
+    
+    let query = db.select().from(executions);
+    
+    if (flowId) {
+      query = query.where(eq(executions.flowId, flowId)) as typeof query;
+    }
+
+    const results = await query;
+
+    return c.json({
+      success: true,
+      executions: results.map(e => ({
+        ...e,
+        result: e.result ? JSON.parse(e.result) : null,
+      })),
+    });
+  } catch (error) {
+    const err = error as Error;
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/**
+ * GET /api/executions/:id - Get a single execution
+ */
+executeRouter.get('/executions/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const execution = await db.select().from(executions).where(eq(executions.id, id)).get();
+
+    if (!execution) {
+      return c.json({ success: false, error: 'Execution not found' }, 404);
+    }
+
+    // Also get any associated schematics
+    const schematicResults = await db.select()
+      .from(schematics)
+      .where(eq(schematics.executionId, id));
+
+    return c.json({
+      success: true,
+      execution: {
+        ...execution,
+        result: execution.result ? JSON.parse(execution.result) : null,
+      },
+      schematics: schematicResults,
+    });
+  } catch (error) {
+    const err = error as Error;
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+export default executeRouter;
+
