@@ -12,6 +12,9 @@ COPY client/package.json ./client/package.json
 # Copy the local tarball BEFORE running bun install
 COPY schematic-renderer-1.1.3.tgz ./schematic-renderer-1.1.3.tgz
 
+# copy it also into client aswell
+COPY schematic-renderer-1.1.3.tgz ./client/schematic-renderer-1.1.3.tgz
+
 # Install dependencies
 RUN bun install
 
