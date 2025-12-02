@@ -56,10 +56,20 @@ export function Modal({
     };
   }, [isOpen, handleEscape]);
 
+  // Prevent keyboard events from propagating to parent (ReactFlow)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Always stop propagation for modals to prevent ReactFlow from capturing keys
+    e.stopPropagation();
+  }, []);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onKeyDown={handleKeyDown}
+      onKeyUp={(e) => e.stopPropagation()}
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 modal-backdrop animate-fade-in"

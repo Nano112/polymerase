@@ -2,7 +2,7 @@
 
 A node-based Minecraft schematic execution engine built with the BHVR stack (Bun, Hono, Vite, React).
 
-## 🏗️ Architecture
+## Architecture
 
 Polymerase is designed for **isomorphic execution** - the same code runs in both the browser and server:
 
@@ -29,7 +29,7 @@ Polymerase is designed for **isomorphic execution** - the same code runs in both
 - **React Flow** - Visual node-based editor
 - **SQLite** - Storage for saved flows
 
-## 📦 Workspace Structure
+## Workspace Structure
 
 ```
 polymerase/
@@ -58,18 +58,18 @@ polymerase/
 └── shared/                # Shared types between client/server
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) v1.2+
+- Bun v1.2+
 - Node.js 18+ (for some tooling)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/polymerase.git
+git clone https://github.com/Nano112/polymerase.git
 cd polymerase
 
 # Install dependencies
@@ -97,7 +97,22 @@ bun run dev:core      # Core package watch mode
 bun run build
 ```
 
-## 📡 API Endpoints
+## Deployment
+
+### Docker / Dokploy
+
+The project includes a `docker-compose.yml` configuration for easy deployment.
+
+```bash
+docker compose up -d --build
+```
+
+This will start:
+- **Client**: Served on port 80 (proxies API requests to server)
+- **Server**: Backend API on port 3000 (internal)
+- **Data**: Persisted in the `./data` volume
+
+## API Endpoints
 
 ### Flows
 
@@ -119,7 +134,7 @@ bun run build
 | GET | `/api/executions` | List execution history |
 | GET | `/api/executions/:id` | Get execution details |
 
-## 🧩 Context Providers
+## Context Providers
 
 Scripts have access to these utilities:
 
@@ -156,7 +171,7 @@ for (let x = 0; x < width; x++) {
 export const output = schem;
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -169,13 +184,13 @@ DATABASE_PATH=./data/polymerase.db
 PORT=3000
 ```
 
-## 📝 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- [Synthase](https://github.com/example/synthase) - Sandboxed JavaScript execution
-- [Nucleation](https://github.com/example/nucleation) - Minecraft schematic WASM library
-- [React Flow](https://reactflow.dev) - Node-based UI
-- [BHVR](https://bhvr.dev) - Bun + Hono + Vite + React stack
+- Synthase - Sandboxed JavaScript execution
+- Nucleation - Minecraft schematic WASM library
+- React Flow - Node-based UI
+- BHVR - Bun + Hono + Vite + React stack

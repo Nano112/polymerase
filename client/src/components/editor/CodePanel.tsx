@@ -4,12 +4,13 @@
  */
 
 import { useCallback, useEffect, useState, useRef } from 'react';
-import Editor from '@monaco-editor/react';
-import { Zap, Info, ArrowRight, CheckCircle, XCircle, Loader2, Plus } from 'lucide-react';
+import Editor, { type Monaco } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
+import { Zap, Info, ArrowRight, CheckCircle, XCircle, Loader2, Plus, Save, AlertTriangle } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import type { IODefinition } from '@polymerase/core';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3000';
 
 interface CodePanelProps {
   nodeId: string;
@@ -23,13 +24,16 @@ interface ValidationState {
 }
 
 export function CodePanel({ nodeId }: CodePanelProps) {
-  const { nodes, updateNodeData, addNode, edges, setEdges, setNodeOutput } = useFlowStore();
+  const { nodes, updateNodeData, addNode, edges, setEdges, setNodeOutput, nodeCache } = useFlowStore();
   const [localCode, setLocalCode] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' });
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const initialValidationDone = useRef(false);
   const lastValidatedCode = useRef<string>('');
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const saveCodeRef = useRef<() => void>(() => {});
 
   // Find the node - check both by ID and look for code nodes
   const node = nodeId ? nodes.find((n) => n.id === nodeId) : null;
@@ -106,6 +110,25 @@ export function CodePanel({ nodeId }: CodePanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, isCodeNode]); // Only re-run when nodeId or isCodeNode changes
 
+  // Manual save function
+  const saveCode = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    updateNodeData(nodeId, { code: localCode });
+    setHasChanges(false);
+    validateScript(localCode);
+  }, [nodeId, localCode, updateNodeData, validateScript]);
+
+  // Keep ref updated for use in Monaco command (avoids stale closure)
+  useEffect(() => {
+    saveCodeRef.current = saveCode;
+  }, [saveCode]);
+
+  // Get execution error for this node
+  const executionError = nodeCache[nodeId]?.error;
+  const executionStatus = nodeCache[nodeId]?.status;
+
   const handleCodeChange = useCallback(
     (value: string | undefined) => {
       const code = value || '';
@@ -117,15 +140,37 @@ export function CodePanel({ nodeId }: CodePanelProps) {
         clearTimeout(debounceRef.current);
       }
 
-      // Debounced update to store and validate
+      // Auto-save is now much less frequent (30 seconds)
+      // Users should use Ctrl/Cmd+S or the Save button for immediate saves
       debounceRef.current = setTimeout(() => {
         updateNodeData(nodeId, { code });
         setHasChanges(false);
         validateScript(code);
-      }, 1000); // Increased debounce to 1 second
+      }, 30000); // 30 seconds auto-save
     },
     [nodeId, updateNodeData, validateScript]
   );
+
+  // Handle editor mount to add save keybinding
+  const handleEditorMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    
+    // Add Ctrl/Cmd+S save keybinding - use ref to avoid stale closure
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      saveCodeRef.current();
+    });
+
+    // Auto-save on blur (when editor loses focus)
+    editor.onDidBlurEditorWidget(() => {
+      // Small delay to allow for potential re-focus
+      setTimeout(() => {
+        if (!editor.hasWidgetFocus()) {
+          saveCodeRef.current();
+        }
+      }, 100);
+    });
+  }, []);
 
   // Auto-create input nodes from IO schema
   const createInputNodesFromIO = useCallback(() => {
@@ -248,8 +293,25 @@ export function CodePanel({ nodeId }: CodePanelProps) {
 
         <div className="flex items-center gap-2">
           {hasChanges && (
-            <span className="text-xs text-amber-400 px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20">
-              Unsaved
+            <>
+              <span className="text-xs text-amber-400 px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20">
+                Unsaved
+              </span>
+              <button
+                onClick={saveCode}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-600/20 text-emerald-400 rounded-lg hover:bg-emerald-600/30 transition-colors border border-emerald-500/30"
+                title="Save (Ctrl/Cmd+S)"
+              >
+                <Save className="w-3 h-3" />
+                Save
+              </button>
+            </>
+          )}
+
+          {executionStatus === 'error' && (
+            <span className="text-xs text-orange-400 px-2 py-1 bg-orange-500/10 rounded border border-orange-500/20 flex items-center gap-1" title={executionError}>
+              <AlertTriangle className="w-3 h-3" />
+              Runtime Error
             </span>
           )}
 
@@ -260,7 +322,7 @@ export function CodePanel({ nodeId }: CodePanelProps) {
             </span>
           )}
 
-          {validation.status === 'valid' && (
+          {validation.status === 'valid' && !executionError && (
             <span className="text-xs text-green-400 px-2 py-1 bg-green-500/10 rounded border border-green-500/20 flex items-center gap-1">
               <CheckCircle className="w-3 h-3" />
               Valid
@@ -284,6 +346,7 @@ export function CodePanel({ nodeId }: CodePanelProps) {
           theme="vs-dark"
           value={localCode}
           onChange={handleCodeChange}
+          onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
             fontSize: 13,
@@ -302,12 +365,28 @@ export function CodePanel({ nodeId }: CodePanelProps) {
         />
       </div>
 
-      {/* Error display */}
+      {/* Execution Error display */}
+      {executionStatus === 'error' && executionError && (
+        <div className="px-6 py-3 bg-orange-900/20 border-b border-orange-500/20">
+          <div className="flex items-start gap-2 text-sm text-orange-400">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium mb-1">Execution Error</div>
+              <pre className="whitespace-pre-wrap font-mono text-xs text-orange-300/80">{executionError}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validation Error display */}
       {validation.status === 'invalid' && validation.error && (
         <div className="px-6 py-3 bg-red-900/20 border-b border-red-500/20">
           <div className="flex items-start gap-2 text-sm text-red-400">
-            <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <pre className="whitespace-pre-wrap font-mono text-xs">{validation.error}</pre>
+            <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium mb-1">Validation Error</div>
+              <pre className="whitespace-pre-wrap font-mono text-xs text-red-300/80">{validation.error}</pre>
+            </div>
           </div>
         </div>
       )}

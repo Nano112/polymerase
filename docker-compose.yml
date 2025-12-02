@@ -1,0 +1,38 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    restart: unless-stopped
+    environment:
+      - DATABASE_PATH=/app/server/data/polymerase.db
+      - PORT=3000
+      - NODE_ENV=production
+    volumes:
+      - polymerase_data:/app/server/data
+    # Expose internally only - nginx proxies to it
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  polymerase_data:
+    driver: local

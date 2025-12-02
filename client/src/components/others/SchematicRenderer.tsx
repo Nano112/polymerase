@@ -13,6 +13,39 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const lastLoadedDataRef = useRef<string | null>(null);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+
+        const handleEvent = (e: Event) => {
+            // Prevents the browser zoom/scroll
+            e.preventDefault();
+            // Stops the event from bubbling up to parents
+            e.stopPropagation();
+        };
+
+        // Option required to allow preventDefault to work
+        const options = { passive: false };
+
+        // Standard events
+        el.addEventListener("wheel", handleEvent, options);
+        el.addEventListener("touchstart", handleEvent, options);
+
+        // Safari/WebKit Gesture events (Pinch to zoom)
+        el.addEventListener("gesturestart", handleEvent, options);
+        el.addEventListener("gesturechange", handleEvent, options);
+        el.addEventListener("gestureend", handleEvent, options);
+
+        return () => {
+            el.removeEventListener("wheel", handleEvent);
+            el.removeEventListener("touchstart", handleEvent);
+            el.removeEventListener("gesturestart", handleEvent);
+            el.removeEventListener("gesturechange", handleEvent);
+            el.removeEventListener("gestureend", handleEvent);
+        };
+    }, []);
 
     // Download function
     const handleDownload = useCallback(() => {
@@ -20,10 +53,10 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
 
         try {
             // Convert to blob
-            const blob = new Blob([schematic], { 
-                type: 'application/octet-stream' 
+            const blob = new Blob([schematic], {
+                type: 'application/octet-stream'
             });
-            
+
             // Create download link
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -31,7 +64,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             link.download = `schematic_${Date.now()}.schem`;
             document.body.appendChild(link);
             link.click();
-            
+
             // Cleanup
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
@@ -76,7 +109,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
                 },
             });
 
-            
+
         } catch (err) {
             setError('Failed to initialize schematic renderer.');
             console.error(err);
@@ -107,12 +140,12 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             console.log('📦 Not ready to load:', { isInitialized, hasRenderer: !!renderer, hasSchematic: !!schematic });
             return;
         }
-        
+
         if (!renderer.schematicManager) {
             console.log('📦 SchematicManager not ready yet, will retry...');
             return;
         }
-        
+
         const newHash = getSchematicHash(schematic);
         if (newHash === lastLoadedDataRef.current) {
             return;
@@ -123,7 +156,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
         setError(null);
 
         let dataToLoad: ArrayBuffer;
-        
+
         if (schematic instanceof Uint8Array) {
             dataToLoad = schematic.slice().buffer;
         } else if (schematic instanceof ArrayBuffer) {
@@ -142,7 +175,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
                 renderer.schematicManager.removeAllSchematics();
                 await new Promise(resolve => requestAnimationFrame(resolve));
             }
-            
+
             await renderer.schematicManager.loadSchematic(schematicId, dataToLoad);
             lastLoadedDataRef.current = newHash;
             console.log('✅ Schematic loaded successfully');
@@ -167,11 +200,11 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
     useEffect(() => {
         if (!schematic) return;
         if (!isInitialized) return;
-        
+
         const timer = setTimeout(() => {
             loadSchematics();
         }, 50);
-        
+
         return () => clearTimeout(timer);
     }, [schematic, isInitialized, loadSchematics]);
 
@@ -187,15 +220,15 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
     if (error) {
         return <div className="flex items-center justify-center h-full text-red-400 text-xs">Error: {error}</div>;
     }
-    
+
     return (
-        <div 
-            className="relative w-full h-full nodrag nopan"
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onWheel={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-        >
+        <div
+      ref={ref}
+      className="relative w-full h-full nodrag nopan"
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onScroll={(e) => e.stopPropagation()}
+    >
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/80 z-10">
                     <span className="text-neutral-400 text-xs">Loading...</span>
@@ -205,7 +238,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
                 ref={canvasRef}
                 style={{ width: '100%', height: '100%' }}
             />
-            <button 
+            <button
                 onClick={handleDownload}
                 className="absolute bottom-2 right-2 p-2 bg-neutral-800/80 hover:bg-neutral-700/80 text-neutral-300 rounded backdrop-blur-sm transition-colors z-20"
                 title="Download schematic"
