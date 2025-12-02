@@ -49,6 +49,6 @@ CMD ["bun", "run", "dist/index.js"]
 # Client Runner
 FROM nginx:alpine AS client
 COPY --from=builder /app/client/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
