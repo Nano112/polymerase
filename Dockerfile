@@ -10,7 +10,7 @@ COPY server/package.json ./server/package.json
 COPY client/package.json ./client/package.json
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Builder stage
 FROM base AS builder
