@@ -9,6 +9,9 @@ COPY shared/package.json ./shared/package.json
 COPY server/package.json ./server/package.json
 COPY client/package.json ./client/package.json
 
+# Copy the local tarball BEFORE running bun install
+COPY schematic-renderer-1.1.3.tgz ./schematic-renderer-1.1.3.tgz
+
 # Install dependencies
 RUN bun install
 
@@ -17,8 +20,7 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build all packages (client, server, core, shared)
-# Set VITE_SERVER_URL to empty string for production build (relative paths)
+# Build all packages
 ENV VITE_SERVER_URL=""
 RUN bun run build
 
@@ -26,18 +28,15 @@ RUN bun run build
 FROM oven/bun:1 AS server
 WORKDIR /app
 
-# Copy necessary files for runtime
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/packages ./packages
 
-# Environment setup
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Persist data
 VOLUME ["/app/server/data"]
 
 WORKDIR /app/server
