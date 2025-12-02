@@ -15,8 +15,8 @@ COPY schematic-renderer-1.1.3.tgz ./schematic-renderer-1.1.3.tgz
 # copy it also into client aswell
 COPY schematic-renderer-1.1.3.tgz ./client/schematic-renderer-1.1.3.tgz
 
-# Install dependencies
-RUN bun install
+# Install dependencies (skip postinstall since source files aren't available yet)
+RUN bun install --ignore-scripts
 
 # Builder stage
 FROM base AS builder
