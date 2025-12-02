@@ -7,7 +7,7 @@ import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { 
   Hash, Type, ToggleLeft, List, Lock, Unlock, Sliders,
-  CheckCircle, Settings, ChevronDown
+  CheckCircle, Settings
 } from 'lucide-react';
 import { useFlowStore, type InputWidgetType } from '../../store/flowStore';
 
@@ -132,7 +132,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
             />
             <div className="flex justify-between text-[10px] text-neutral-500">
               <span>{data.min ?? 0}</span>
-              <span className="font-mono text-purple-400">{data.value ?? 0}</span>
+              <span className="font-mono text-purple-400">{String(data.value ?? 0)}</span>
               <span>{data.max ?? 100}</span>
             </div>
           </div>

@@ -4,9 +4,9 @@
  */
 
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import { Play, Trash2, Loader2, CheckCircle, XCircle, AlertTriangle, Terminal, Download, Hash, Type, List, Sliders } from 'lucide-react';
+import { Play, Trash2, Loader2, CheckCircle, XCircle, AlertTriangle, Terminal, Download, Hash, Type, List } from 'lucide-react';
 import { useFlowStore, type FlowNode } from '../../store/flowStore';
-import type { IODefinition } from '@polymerase/core';
+import type { IODefinition, IOPort } from '@polymerase/core';
 import { WorkerClient } from '@polymerase/core/worker';
 // @ts-ignore - Import worker directly from source
 import Worker from '../../../../packages/core/src/worker/browser.worker.ts?worker';
@@ -39,7 +39,6 @@ export function ExecutionPanel({ workerClient }: ExecutionPanelProps) {
     addExecutionLog,
     setNodeExecutionStatus,
     setExecutingNodeId,
-    nodeCache,
   } = useFlowStore();
 
   const [inputValues, setInputValues] = useState<Record<string, unknown>>({});
@@ -300,7 +299,7 @@ export function ExecutionPanel({ workerClient }: ExecutionPanelProps) {
     return { bg: '', text: 'text-neutral-400', border: 'border-transparent', Icon: null };
   };
 
-  const renderInput = (key: string, config: Record<string, unknown>) => {
+  const renderInput = (key: string, config: IOPort | Record<string, unknown>) => {
     const value = inputValues[key];
     const type = config.type as string;
     const options = config.options as string[] | undefined;

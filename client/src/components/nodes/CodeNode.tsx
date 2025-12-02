@@ -217,7 +217,7 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
               )}
             </div>
 
-            {status === 'completed' && cache?.output && (
+            {status === 'completed' && !!cache?.output && (
               <div className="text-[9px] text-green-400/70">
                 Cached
               </div>

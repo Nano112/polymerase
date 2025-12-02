@@ -12,6 +12,8 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import type { Edge } from '@xyflow/react';
+import { type FlowNode } from '../../store/flowStore';
 
 import { 
   FolderOpen, 

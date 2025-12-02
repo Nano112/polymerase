@@ -230,7 +230,7 @@ export function NodePropertiesPanel({ nodeId }: NodePropertiesPanelProps) {
                 />
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-neutral-500">{node.data.min ?? 0}</span>
-                  <span className="text-sm font-mono text-purple-400">{node.data.value ?? 0}</span>
+                  <span className="text-sm font-mono text-purple-400">{String(node.data.value ?? 0)}</span>
                   <span className="text-xs text-neutral-500">{node.data.max ?? 100}</span>
                 </div>
                 

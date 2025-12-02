@@ -3,10 +3,15 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), wasm(), topLevelAwait()],
+  plugins: [react(), tailwindcss(), wasm()],
+  build: {
+    target: 'esnext', // Modern browsers support top-level await natively
+  },
+  worker: {
+    format: 'es', // Use ES module format for workers (compatible with code-splitting)
+  },
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

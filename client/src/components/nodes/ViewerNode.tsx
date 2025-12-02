@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef } from 'react';
 import { Handle, Position, type NodeProps, NodeResizer } from '@xyflow/react';
-import { Eye, Box, Hash, Type, ToggleLeft, Code2, ArrowRight, Download } from 'lucide-react';
+import { Eye, Box, Hash, Type, ToggleLeft, Code2, ArrowRight } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { isSchematicData, type SchematicData } from '@polymerase/core';
 
@@ -227,8 +227,6 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
         const binaryData = schematicWrapper.data instanceof Uint8Array 
           ? schematicWrapper.data 
           : new TextEncoder().encode(schematicWrapper.data as string);
-        const byteSize = binaryData.byteLength;
-        const name = schematicWrapper.metadata?.name || 'Schematic';
         
         return (
           <div className="flex flex-col h-full w-full relative">

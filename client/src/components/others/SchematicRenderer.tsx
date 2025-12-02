@@ -52,8 +52,11 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
         if (!schematic) return;
 
         try {
-            // Convert to blob
-            const blob = new Blob([schematic], {
+            // Convert to blob - create a copy to ensure we have a proper ArrayBuffer
+            const bytes = schematic instanceof Uint8Array 
+                ? schematic 
+                : new Uint8Array(schematic);
+            const blob = new Blob([new Uint8Array(bytes)], {
                 type: 'application/octet-stream'
             });
 

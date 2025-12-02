@@ -142,13 +142,6 @@ function getDownstreamNodes(nodeId: string, edges: Edge[]): Set<string> {
   return downstream;
 }
 
-/**
- * Create a hash of input values to detect changes
- */
-function hashInputs(inputs: Record<string, unknown>): string {
-  return JSON.stringify(inputs);
-}
-
 // ============================================================================
 // Store
 // ============================================================================
@@ -237,7 +230,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    const { nodeCache, ...rest } = get();
+    const { nodeCache } = get();
     const newCache = { ...nodeCache };
     delete newCache[nodeId];
     

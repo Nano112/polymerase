@@ -15,7 +15,7 @@ import { useFlowStore } from '../../store/flowStore';
 const DataEdge = memo(({
   id,
   source,
-  target,
+  target: _target,
   sourceX,
   sourceY,
   targetX,

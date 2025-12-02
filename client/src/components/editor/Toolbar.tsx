@@ -14,7 +14,6 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
-  Box,
 } from 'lucide-react';
 import { useFlowStore, type FlowNode } from '../../store/flowStore';
 
