@@ -217,11 +217,22 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
               )}
             </div>
 
-            {status === 'completed' && !!cache?.output && (
-              <div className="text-[9px] text-green-400/70">
-                Cached
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {status === 'completed' && cache?.executionTime !== undefined && (
+                <div className="flex items-center gap-1 text-[9px] text-neutral-400">
+                  <Clock className="w-2.5 h-2.5" />
+                  {cache.executionTime < 1000 
+                    ? `${cache.executionTime}ms` 
+                    : `${(cache.executionTime / 1000).toFixed(1)}s`
+                  }
+                </div>
+              )}
+              {status === 'completed' && !!cache?.output && (
+                <div className="text-[9px] text-green-400/70">
+                  Cached
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

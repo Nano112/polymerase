@@ -133,14 +133,24 @@ function unwrapValue(rawOutput: unknown): unknown {
   if (isImageData(rawOutput)) return rawOutput;
   if (isTabularData(rawOutput)) return rawOutput;
   
+  const record = rawOutput as Record<string, unknown>;
+  const entries = Object.entries(record);
+  
+  // If there's a 'default' key, prefer that
+  if ('default' in record) {
+    const defaultVal = record['default'];
+    if (defaultVal !== undefined && defaultVal !== null) {
+      return defaultVal;
+    }
+  }
+  
   // Check if it's an object with a single output value
-  const entries = Object.entries(rawOutput as Record<string, unknown>);
   if (entries.length === 1) {
     const [, value] = entries[0];
     return value;
   }
   
-  // Check for known data types in values
+  // Check for known data types in values (prioritize finding schematic/image/table)
   for (const [, value] of entries) {
     if (isSchematicData(value) || isImageData(value) || isTabularData(value)) {
       return value;

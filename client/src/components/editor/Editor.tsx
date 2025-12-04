@@ -27,6 +27,13 @@ import {
   Menu,
   X,
   Plus,
+  Undo2,
+  Redo2,
+  Maximize2,
+  Trash2,
+  Copy,
+  Grid3X3,
+  HelpCircle,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
@@ -37,6 +44,8 @@ import { ExecutionPanel } from './ExecutionPanel';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { FlowManager } from './FlowManager';
 import { Modal } from '../ui/Modal';
+import { ShortcutsModal } from '../ui/ShortcutsModal';
+import { CommandPalette } from '../ui/CommandPalette';
 import { useLocalExecutor } from '../../hooks/useLocalExecutor';
 
 export function Editor() {
@@ -54,6 +63,7 @@ export function Editor() {
     selectedNodeId,
     selectNode,
     deleteNode,
+    addNode,
     clearAllCache,
     nodeCache,
     isExecuting,
@@ -62,6 +72,10 @@ export function Editor() {
     addExecutionLog,
     setNodeExecutionStatus,
     setExecutingNodeId,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useFlowStore();
 
   // Modal states
@@ -71,6 +85,12 @@ export function Editor() {
   const [showExecution, setShowExecution] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [showExecuteMenu, setShowExecuteMenu] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  
+  // Clipboard for copy/paste
+  const [clipboard, setClipboard] = useState<{ nodes: FlowNode[]; edges: Edge[] } | null>(null);
   
   // Mobile states
   const [isMobile, setIsMobile] = useState(false);
@@ -86,6 +106,178 @@ export function Editor() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+  
+  // Zoom to fit all nodes
+  const handleZoomToFit = useCallback(() => {
+    if (reactFlowInstance.current) {
+      reactFlowInstance.current.fitView({ padding: 0.2, duration: 300 });
+    }
+  }, []);
+  
+  // Duplicate selected node
+  const handleDuplicateNode = useCallback(() => {
+    if (!selectedNodeId) return;
+    
+    const nodeToClone = nodes.find(n => n.id === selectedNodeId);
+    if (!nodeToClone) return;
+    
+    const newId = `${nodeToClone.type}-${crypto.randomUUID().slice(0, 8)}`;
+    const newNode: FlowNode = {
+      ...nodeToClone,
+      id: newId,
+      position: {
+        x: nodeToClone.position.x + 30,
+        y: nodeToClone.position.y + 30,
+      },
+      data: { ...nodeToClone.data },
+      selected: false,
+    };
+    
+    addNode(newNode);
+    selectNode(newId);
+  }, [selectedNodeId, nodes, addNode, selectNode]);
+  
+  // Copy selected nodes
+  const handleCopyNodes = useCallback(() => {
+    // Get all selected nodes
+    const selectedNodes = nodes.filter(n => n.selected);
+    if (selectedNodes.length === 0 && selectedNodeId) {
+      // If no multi-selection, use the single selected node
+      const node = nodes.find(n => n.id === selectedNodeId);
+      if (node) {
+        selectedNodes.push(node);
+      }
+    }
+    
+    if (selectedNodes.length === 0) return;
+    
+    // Get edges between selected nodes
+    const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+    const selectedEdges = edges.filter(
+      e => selectedNodeIds.has(e.source) && selectedNodeIds.has(e.target)
+    );
+    
+    setClipboard({ nodes: selectedNodes, edges: selectedEdges });
+    addExecutionLog(`[OK] Copied ${selectedNodes.length} node(s)`);
+  }, [nodes, edges, selectedNodeId, addExecutionLog]);
+  
+  // Paste nodes from clipboard
+  const handlePasteNodes = useCallback(() => {
+    if (!clipboard || clipboard.nodes.length === 0) return;
+    
+    // Generate ID mapping for new nodes
+    const idMap = new Map<string, string>();
+    clipboard.nodes.forEach(node => {
+      const newId = `${node.type}-${crypto.randomUUID().slice(0, 8)}`;
+      idMap.set(node.id, newId);
+    });
+    
+    // Offset pasted nodes by 50px
+    const offsetX = 50;
+    const offsetY = 50;
+    
+    // Create new nodes
+    const newNodes: FlowNode[] = clipboard.nodes.map(node => ({
+      ...node,
+      id: idMap.get(node.id)!,
+      position: {
+        x: node.position.x + offsetX,
+        y: node.position.y + offsetY,
+      },
+      data: { ...node.data },
+      selected: true,
+    }));
+    
+    // Create new edges with updated IDs
+    const newEdges: Edge[] = clipboard.edges.map(edge => ({
+      ...edge,
+      id: `edge-${crypto.randomUUID().slice(0, 8)}`,
+      source: idMap.get(edge.source)!,
+      target: idMap.get(edge.target)!,
+    }));
+    
+    // Deselect all existing nodes and add new ones
+    nodes.forEach(n => {
+      if (n.selected) {
+        onNodesChange([{ type: 'select', id: n.id, selected: false }]);
+      }
+    });
+    
+    // Add nodes and edges
+    newNodes.forEach(node => addNode(node));
+    newEdges.forEach(edge => onConnect({
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle || null,
+      targetHandle: edge.targetHandle || null,
+    }));
+    
+    addExecutionLog(`[OK] Pasted ${newNodes.length} node(s)`);
+  }, [clipboard, nodes, addNode, onNodesChange, onConnect, addExecutionLog]);
+  
+  // Keyboard shortcuts for undo/redo/copy/paste
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+      
+      if (cmdKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (canUndo()) undo();
+      } else if (cmdKey && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        if (canRedo()) redo();
+      } else if (cmdKey && e.key === 'y') {
+        // Windows-style redo
+        e.preventDefault();
+        if (canRedo()) redo();
+      } else if (cmdKey && e.key === 'd') {
+        // Duplicate selected node
+        e.preventDefault();
+        handleDuplicateNode();
+      } else if (cmdKey && e.key === 'c') {
+        // Copy nodes
+        e.preventDefault();
+        handleCopyNodes();
+      } else if (cmdKey && e.key === 'v') {
+        // Paste nodes
+        e.preventDefault();
+        handlePasteNodes();
+      } else if ((cmdKey && e.key === '0') || e.key === 'f') {
+        // Zoom to fit
+        if (!cmdKey || e.key === '0') {
+          e.preventDefault();
+          handleZoomToFit();
+        }
+      } else if ((cmdKey && e.key === '/') || e.key === '?') {
+        // Show shortcuts panel
+        e.preventDefault();
+        setShowShortcuts(true);
+      } else if (cmdKey && e.key === 'k') {
+        // Show command palette
+        e.preventDefault();
+        setShowCommandPalette(true);
+      } else if (e.key === 'Escape') {
+        // Close modals
+        setShowShortcuts(false);
+        setShowCommandPalette(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, canUndo, canRedo, handleDuplicateNode, handleCopyNodes, handlePasteNodes, handleZoomToFit]);
+  
+  // Clear all node caches
+  const handleClearCache = useCallback(() => {
+    clearAllCache();
+    addExecutionLog('Cleared all node outputs');
+  }, [clearAllCache, addExecutionLog]);
 
   const { executeScript, workerClient } = useLocalExecutor();
 
@@ -217,8 +409,10 @@ export function Editor() {
           setNodeExecutionStatus(node.id, 'running');
           addExecutionLog(`Executing "${node.data.label || 'Code'}"...`);
 
-          // Execute
+          // Execute with timing
+          const startTime = Date.now();
           const result = await executeScript(code, inputValues);
+          const executionTime = Date.now() - startTime;
 
           if (result.success) {
             // Build final result with binary schematic data
@@ -253,8 +447,8 @@ export function Editor() {
             }
 
             nodeOutputs.set(node.id, finalResult);
-            setNodeExecutionStatus(node.id, 'completed', finalResult);
-            addExecutionLog(`[OK] "${node.data.label || 'Code'}" completed${result.executionTime ? ` in ${result.executionTime}ms` : ''}`);
+            setNodeExecutionStatus(node.id, 'completed', finalResult, undefined, executionTime);
+            addExecutionLog(`[OK] "${node.data.label || 'Code'}" completed in ${executionTime}ms`);
           } else {
             setNodeExecutionStatus(node.id, 'error', undefined, result.error?.message);
             addExecutionLog(`[ERROR] "${node.data.label || 'Code'}": ${result.error?.message}`);
@@ -269,15 +463,23 @@ export function Editor() {
           if (incomingEdge) {
             const sourceOutput = nodeOutputs.get(incomingEdge.source);
             if (sourceOutput) {
-              // Unwrap if it's a single output
+              // Unwrap to get the actual value - prefer sourceHandle, then 'default', then first key
+              const handleKey = incomingEdge.sourceHandle || 'default';
               let viewerValue: unknown = sourceOutput;
-              const keys = Object.keys(sourceOutput);
-              if (keys.length === 1) {
-                viewerValue = sourceOutput[keys[0]];
+              
+              if (handleKey in sourceOutput) {
+                viewerValue = sourceOutput[handleKey];
+              } else if ('default' in sourceOutput) {
+                viewerValue = sourceOutput['default'];
+              } else {
+                const keys = Object.keys(sourceOutput);
+                if (keys.length === 1) {
+                  viewerValue = sourceOutput[keys[0]];
+                }
               }
               
-              // Set the viewer's cache
-              setNodeExecutionStatus(node.id, 'completed', sourceOutput);
+              // Set the viewer's cache with the unwrapped value
+              setNodeExecutionStatus(node.id, 'completed', { default: viewerValue });
               
               // If passthrough is enabled, make output available to downstream nodes
               const viewerData = node.data as { passthrough?: boolean };
@@ -295,12 +497,14 @@ export function Editor() {
           if (incomingEdge) {
             const sourceOutput = nodeOutputs.get(incomingEdge.source);
             if (sourceOutput) {
-              // Unwrap if it's a single output
-              let outputValue: unknown = sourceOutput;
+              // Unwrap - prefer sourceHandle, then 'default', then first key
               const handleKey = incomingEdge.sourceHandle || 'default';
+              let outputValue: unknown = sourceOutput;
               
               if (handleKey in sourceOutput) {
                 outputValue = sourceOutput[handleKey];
+              } else if ('default' in sourceOutput) {
+                outputValue = sourceOutput['default'];
               } else {
                 const keys = Object.keys(sourceOutput);
                 if (keys.length === 1) {
@@ -336,6 +540,7 @@ export function Editor() {
           setNodeExecutionStatus(node.id, 'running');
           addExecutionLog(`Executing subflow "${node.data.label || 'Subflow'}"...`);
           
+          const subflowStartTime = Date.now();
           try {
             // Gather inputs for the subflow
             const subflowInputs: Record<string, unknown> = {};
@@ -449,8 +654,9 @@ export function Editor() {
             }
             
             nodeOutputs.set(node.id, subflowResult);
-            setNodeExecutionStatus(node.id, 'completed', subflowResult);
-            addExecutionLog(`[OK] Subflow "${node.data.label || 'Subflow'}" completed`);
+            const subflowTime = Date.now() - subflowStartTime;
+            setNodeExecutionStatus(node.id, 'completed', subflowResult, undefined, subflowTime);
+            addExecutionLog(`[OK] Subflow "${node.data.label || 'Subflow'}" completed in ${subflowTime}ms`);
             
           } catch (err) {
             const error = err as Error;
@@ -567,6 +773,74 @@ export function Editor() {
               </span>
             )}
           </div>
+          
+          {/* Undo/Redo buttons - Desktop only */}
+          {!isMobile && (
+            <>
+              <div className="h-6 w-px bg-neutral-800" />
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={undo}
+                  disabled={!canUndo()}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Undo (Cmd+Z)"
+                >
+                  <Undo2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo()}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Redo (Cmd+Shift+Z)"
+                >
+                  <Redo2 className="w-4 h-4" />
+                </button>
+                <div className="h-4 w-px bg-neutral-700 mx-1" />
+                <button
+                  onClick={handleDuplicateNode}
+                  disabled={!selectedNodeId}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Duplicate (Cmd+D)"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleZoomToFit}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  title="Zoom to Fit (Cmd+0)"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setSnapToGrid(!snapToGrid)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    snapToGrid 
+                      ? 'text-blue-400 bg-blue-500/20 hover:bg-blue-500/30' 
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
+                  }`}
+                  title={`Snap to Grid (${snapToGrid ? 'On' : 'Off'})`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleClearCache}
+                  disabled={completedCount === 0}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Clear All Outputs"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <div className="w-px h-4 bg-neutral-700" />
+                <button
+                  onClick={() => setShowShortcuts(true)}
+                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                  title="Keyboard Shortcuts (⌘/)"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Center: Execution status - Hidden on mobile */}
@@ -764,7 +1038,7 @@ export function Editor() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
-          snapToGrid
+          snapToGrid={snapToGrid}
           snapGrid={[16, 16]}
           defaultEdgeOptions={{
             type: 'data',
@@ -935,6 +1209,18 @@ export function Editor() {
       >
         <ExecutionPanel workerClient={workerClient} />
       </Modal>
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal 
+        isOpen={showShortcuts} 
+        onClose={() => setShowShortcuts(false)} 
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+      />
     </div>
   );
 }

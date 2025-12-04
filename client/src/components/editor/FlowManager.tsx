@@ -2,7 +2,7 @@
  * FlowManager - Manage flows from database
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   FolderOpen, 
@@ -12,7 +12,9 @@ import {
   FileCode,
   Loader2,
   AlertCircle,
-  Check
+  Check,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { Modal } from '../ui/Modal';
@@ -39,6 +41,85 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
   const { loadFlow, exportFlow, clearFlow, flowId, flowName } = useFlowStore();
   const [newFlowName, setNewFlowName] = useState('');
   const [showNewFlow, setShowNewFlow] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Export flow to file
+  const handleExportToFile = () => {
+    const flowData = exportFlow();
+    const json = JSON.stringify(flowData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${flowData.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.polyflow.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import flow from file
+  const handleImportFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const flowData = JSON.parse(content);
+        
+        // Validate basic structure
+        if (!flowData.nodes || !flowData.edges) {
+          throw new Error('Invalid flow file: missing nodes or edges');
+        }
+        
+        // Generate new IDs to avoid conflicts
+        const idMap = new Map<string, string>();
+        
+        // Map old node IDs to new ones
+        flowData.nodes.forEach((node: { id: string; type?: string }) => {
+          const newId = `${node.type || 'node'}-${crypto.randomUUID().slice(0, 8)}`;
+          idMap.set(node.id, newId);
+        });
+        
+        // Update node IDs
+        const newNodes = flowData.nodes.map((node: { id: string; [key: string]: unknown }) => ({
+          ...node,
+          id: idMap.get(node.id) || node.id,
+        }));
+        
+        // Update edge source/target IDs
+        const newEdges = flowData.edges.map((edge: { id: string; source: string; target: string; [key: string]: unknown }) => ({
+          ...edge,
+          id: `edge-${crypto.randomUUID().slice(0, 8)}`,
+          source: idMap.get(edge.source) || edge.source,
+          target: idMap.get(edge.target) || edge.target,
+        }));
+        
+        // Load the flow with new IDs
+        loadFlow({
+          ...flowData,
+          id: crypto.randomUUID(),
+          name: flowData.name + ' (Imported)',
+          nodes: newNodes,
+          edges: newEdges,
+        });
+        
+        onClose();
+      } catch (err) {
+        console.error('Failed to import flow:', err);
+        alert('Failed to import flow: ' + (err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Fetch all flows
   const { data, isLoading, error } = useQuery({
@@ -151,6 +232,15 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
       size="lg"
     >
       <div className="p-6">
+        {/* Hidden file input for import */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImportFromFile}
+          accept=".json,.polyflow.json"
+          className="hidden"
+        />
+
         {/* Actions Bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -177,6 +267,23 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
                 Save Current
               </button>
             )}
+            <div className="w-px h-6 bg-neutral-700" />
+            <button
+              onClick={handleExportToFile}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all"
+              title="Export to .polyflow.json file"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all"
+              title="Import from .polyflow.json file"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </button>
           </div>
           
           {flowId && (

@@ -36,6 +36,7 @@ export interface NodeExecutionCache {
   output?: unknown;
   error?: string;
   lastExecutedAt?: number;
+  executionTime?: number;  // Duration in milliseconds
   inputHash?: string;  // Hash of inputs to detect changes
 }
 
@@ -93,12 +94,26 @@ export interface FlowNode extends Node {
   };
 }
 
+// History entry for undo/redo
+interface HistoryEntry {
+  nodes: FlowNode[];
+  edges: Edge[];
+  timestamp: number;
+}
+
+const MAX_HISTORY_SIZE = 50;
+
 interface FlowState {
   // Flow data
   flowId: string | null;
   flowName: string;
   nodes: FlowNode[];
   edges: Edge[];
+  
+  // History for undo/redo
+  history: HistoryEntry[];
+  historyIndex: number;  // Current position in history (-1 means at present)
+  isUndoRedoing: boolean;  // Flag to prevent recording during undo/redo
   
   // Execution state
   nodeCache: Record<string, NodeExecutionCache>;
@@ -125,7 +140,7 @@ interface FlowState {
   selectNode: (nodeId: string | null) => void;
   
   // Execution cache
-  setNodeExecutionStatus: (nodeId: string, status: NodeExecutionStatus, output?: unknown, error?: string) => void;
+  setNodeExecutionStatus: (nodeId: string, status: NodeExecutionStatus, output?: unknown, error?: string, executionTime?: number) => void;
   setNodeOutput: (nodeId: string, output: unknown) => void;
   invalidateNode: (nodeId: string) => void;
   invalidateDownstream: (nodeId: string) => void;
@@ -146,6 +161,13 @@ interface FlowState {
   
   // Input node helpers
   getExposedInputs: () => FlowNode[];
+  
+  // History operations
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  pushHistory: () => void;  // Manually push current state to history
   
   // Subflow operations
   savedSubflows: SavedSubflow[];
@@ -195,6 +217,16 @@ function getDownstreamNodes(nodeId: string, edges: Edge[]): Set<string> {
   return downstream;
 }
 
+/**
+ * Deep clone nodes and edges for history
+ */
+function cloneFlowState(nodes: FlowNode[], edges: Edge[]): { nodes: FlowNode[]; edges: Edge[] } {
+  return {
+    nodes: JSON.parse(JSON.stringify(nodes)),
+    edges: JSON.parse(JSON.stringify(edges)),
+  };
+}
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -208,6 +240,12 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   flowName: 'Untitled Flow',
   nodes: initialNodes,
   edges: initialEdges,
+  
+  // History state
+  history: [],
+  historyIndex: -1,
+  isUndoRedoing: false,
+  
   nodeCache: {},
   executingNodeId: null,
   selectedNodeId: null,
@@ -222,18 +260,47 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   // React Flow handlers
   onNodesChange: (changes) => {
+    const state = get();
+    
+    // Check if this is a structural change that should be recorded
+    const hasStructuralChange = changes.some(
+      c => c.type === 'remove' || c.type === 'add'
+    );
+    
+    // For position changes, we debounce by not recording every move
+    // Instead we'll record on mouseup (handled separately)
+    
+    if (hasStructuralChange && !state.isUndoRedoing) {
+      get().pushHistory();
+    }
+    
     set({
-      nodes: applyNodeChanges(changes, get().nodes),
+      nodes: applyNodeChanges(changes, state.nodes),
     });
   },
   
   onEdgesChange: (changes) => {
+    const state = get();
+    
+    // Record history for edge removals
+    const hasRemoval = changes.some(c => c.type === 'remove');
+    if (hasRemoval && !state.isUndoRedoing) {
+      get().pushHistory();
+    }
+    
     set({
-      edges: applyEdgeChanges(changes, get().edges),
+      edges: applyEdgeChanges(changes, state.edges),
     });
   },
   
   onConnect: (connection) => {
+    const state = get();
+    
+    // Record history before adding edge
+    if (!state.isUndoRedoing) {
+      get().pushHistory();
+    }
+    
     // When a new connection is made, invalidate the target node
     const targetId = connection.target;
     if (targetId) {
@@ -241,16 +308,23 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     }
     
     set({
-      edges: addEdge(connection, get().edges),
+      edges: addEdge(connection, state.edges),
     });
   },
 
   // Node operations
   addNode: (node) => {
+    const state = get();
+    
+    // Record history before adding node
+    if (!state.isUndoRedoing) {
+      get().pushHistory();
+    }
+    
     set({
-      nodes: [...get().nodes, node],
+      nodes: [...state.nodes, node],
       nodeCache: {
-        ...get().nodeCache,
+        ...state.nodeCache,
         [node.id]: { status: 'idle' },
       },
     });
@@ -283,16 +357,22 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    const { nodeCache } = get();
-    const newCache = { ...nodeCache };
+    const state = get();
+    
+    // Record history before deleting
+    if (!state.isUndoRedoing) {
+      get().pushHistory();
+    }
+    
+    const newCache = { ...state.nodeCache };
     delete newCache[nodeId];
     
     set({
-      nodes: get().nodes.filter((node) => node.id !== nodeId),
-      edges: get().edges.filter(
+      nodes: state.nodes.filter((node) => node.id !== nodeId),
+      edges: state.edges.filter(
         (edge) => edge.source !== nodeId && edge.target !== nodeId
       ),
-      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+      selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
       nodeCache: newCache,
     });
   },
@@ -302,7 +382,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   // Execution cache
-  setNodeExecutionStatus: (nodeId, status, output, error) => {
+  setNodeExecutionStatus: (nodeId, status, output, error, executionTime) => {
     set({
       nodeCache: {
         ...get().nodeCache,
@@ -312,6 +392,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           output: output !== undefined ? output : get().nodeCache[nodeId]?.output,
           error,
           lastExecutedAt: status === 'completed' ? Date.now() : get().nodeCache[nodeId]?.lastExecutedAt,
+          executionTime: executionTime !== undefined ? executionTime : get().nodeCache[nodeId]?.executionTime,
         },
       },
     });
@@ -428,6 +509,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       })),
       nodeCache: newCache,
       executionLogs: [],
+      // Clear history when loading a new flow
+      history: [],
+      historyIndex: -1,
     });
   },
 
@@ -463,6 +547,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       nodeCache: {},
       selectedNodeId: null,
       executionLogs: [],
+      // Clear history when clearing flow
+      history: [],
+      historyIndex: -1,
     });
   },
   
@@ -472,6 +559,106 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     return state.nodes.filter(
       node => node.type?.includes('input') && !node.data.isConstant
     );
+  },
+  
+  // History operations
+  pushHistory: () => {
+    const state = get();
+    if (state.isUndoRedoing) return;  // Don't record during undo/redo
+    
+    const entry: HistoryEntry = {
+      ...cloneFlowState(state.nodes, state.edges),
+      timestamp: Date.now(),
+    };
+    
+    // If we're not at the end of history, truncate future entries
+    let newHistory = state.historyIndex >= 0 
+      ? state.history.slice(0, state.historyIndex + 1)
+      : [...state.history];
+    
+    // Add new entry
+    newHistory.push(entry);
+    
+    // Limit history size
+    if (newHistory.length > MAX_HISTORY_SIZE) {
+      newHistory = newHistory.slice(-MAX_HISTORY_SIZE);
+    }
+    
+    set({
+      history: newHistory,
+      historyIndex: -1,  // Reset to present
+    });
+  },
+  
+  undo: () => {
+    const state = get();
+    
+    // Calculate which history entry to go to
+    const currentIndex = state.historyIndex === -1 
+      ? state.history.length - 1  // We're at present, go to last history entry
+      : state.historyIndex - 1;   // Go back one more
+    
+    if (currentIndex < 0 || state.history.length === 0) return;  // Nothing to undo
+    
+    // If at present, save current state first
+    if (state.historyIndex === -1) {
+      const currentEntry: HistoryEntry = {
+        ...cloneFlowState(state.nodes, state.edges),
+        timestamp: Date.now(),
+      };
+      set({
+        history: [...state.history, currentEntry],
+        isUndoRedoing: true,
+      });
+    } else {
+      set({ isUndoRedoing: true });
+    }
+    
+    const targetEntry = state.history[currentIndex];
+    
+    set({
+      nodes: JSON.parse(JSON.stringify(targetEntry.nodes)),
+      edges: JSON.parse(JSON.stringify(targetEntry.edges)),
+      historyIndex: currentIndex,
+      isUndoRedoing: false,
+    });
+  },
+  
+  redo: () => {
+    const state = get();
+    
+    if (state.historyIndex === -1 || state.historyIndex >= state.history.length - 1) {
+      return;  // Nothing to redo (at present or at end)
+    }
+    
+    const nextIndex = state.historyIndex + 1;
+    const targetEntry = state.history[nextIndex];
+    
+    set({
+      isUndoRedoing: true,
+    });
+    
+    // If next is the last entry (present), just restore and reset index
+    const isAtPresent = nextIndex === state.history.length - 1;
+    
+    set({
+      nodes: JSON.parse(JSON.stringify(targetEntry.nodes)),
+      edges: JSON.parse(JSON.stringify(targetEntry.edges)),
+      historyIndex: isAtPresent ? -1 : nextIndex,
+      isUndoRedoing: false,
+    });
+  },
+  
+  canUndo: () => {
+    const state = get();
+    // Can undo if there's history and we're either at present or not at the first entry
+    return state.history.length > 0 && (state.historyIndex === -1 || state.historyIndex > 0);
+  },
+  
+  canRedo: () => {
+    const state = get();
+    // Can redo if we're in history (not at present)
+    return state.historyIndex !== -1 && state.historyIndex < state.history.length - 1;
   },
   
   // Subflow operations
