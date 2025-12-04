@@ -348,3 +348,155 @@ input[type="range"]::-moz-range-thumb {
 .react-flow__edge:hover .react-flow__edge-path {
   stroke-width: 3;
 }
+
+/* ============================================
+   Mobile-First Responsive Styles
+   ============================================ */
+
+/* Mobile touch improvements */
+@media (max-width: 768px) {
+  /* Larger handles for touch */
+  .react-flow__handle {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+  }
+  
+  /* Better touch targets for controls */
+  .react-flow__controls button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  
+  .react-flow__controls svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  /* Hide minimap on mobile - takes too much space */
+  .react-flow__minimap {
+    display: none !important;
+  }
+  
+  /* Better panel positioning */
+  .react-flow__panel.bottom-center {
+    display: none !important;
+  }
+  
+  /* Scrollbar hidden on mobile */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+/* Touch-friendly button sizes */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.75rem 1rem;
+  }
+  
+  .react-flow__handle {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  /* Larger tap targets for interactive elements */
+  button, [role="button"], input, select, textarea {
+    min-height: 44px;
+  }
+  
+  input[type="checkbox"], input[type="radio"] {
+    min-height: auto;
+    width: 20px;
+    height: 20px;
+  }
+  
+  input[type="range"] {
+    min-height: 44px;
+  }
+  
+  input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -8px;
+  }
+}
+
+/* Mobile toolbar sheet */
+.mobile-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #171717;
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 40;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.mobile-sheet.collapsed {
+  transform: translateY(calc(100% - 4rem));
+}
+
+.mobile-sheet-handle {
+  width: 36px;
+  height: 5px;
+  background: #404040;
+  border-radius: 2.5px;
+  margin: 0.75rem auto;
+}
+
+/* Floating action button */
+.fab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+
+/* Mobile header condensed */
+@media (max-width: 640px) {
+  .mobile-header {
+    padding: 0.5rem !important;
+  }
+  
+  .mobile-header input {
+    max-width: 120px;
+    font-size: 0.875rem;
+  }
+}
+
+/* Safe area insets for iOS */
+@supports (padding: max(0px)) {
+  .mobile-sheet {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .fab {
+    bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  }
+}
+
+/* Prevent text selection on mobile for better touch */
+@media (pointer: coarse) {
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}

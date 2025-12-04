@@ -242,7 +242,12 @@ function SaveAsNodeDialog({ isOpen, onClose, onSave, validationError }: SaveAsNo
 // Main Toolbar Component
 // ============================================================================
 
-export function Toolbar() {
+interface ToolbarProps {
+  isMobile?: boolean;
+  onNodeAdded?: () => void;
+}
+
+export function Toolbar({ isMobile = false, onNodeAdded }: ToolbarProps) {
   const { 
     addNode, 
     nodes, 
@@ -325,8 +330,11 @@ export function Toolbar() {
           setNodeOutput(nodeId, { output: template.defaultValue });
         }, 0);
       }
+      
+      // Callback for mobile to close sheet
+      onNodeAdded?.();
     },
-    [addNode, nodes, setNodeOutput]
+    [addNode, nodes, setNodeOutput, onNodeAdded]
   );
 
   const handleAddSubflow = useCallback((subflow: SavedSubflow) => {
@@ -337,7 +345,8 @@ export function Toolbar() {
       : 200;
       
     addSubflowNode(subflow, { x: maxX + 280, y: avgY });
-  }, [nodes, addSubflowNode]);
+    onNodeAdded?.();
+  }, [nodes, addSubflowNode, onNodeAdded]);
 
   const handleSaveAsSubflow = useCallback((name: string, category: string) => {
     const result = saveAsSubflow(name, category);
@@ -358,6 +367,90 @@ export function Toolbar() {
     setShowSaveDialog(true);
   }, [canSaveAsSubflow, subflowValidation]);
 
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile Grid Layout */}
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Add Node</h3>
+            <button
+              onClick={handleOpenSaveDialog}
+              className={`
+                flex items-center gap-2 px-3 py-2 rounded-lg transition-colors
+                ${canSaveAsSubflow 
+                  ? 'bg-indigo-500/20 text-indigo-400' 
+                  : 'bg-neutral-800 text-neutral-500'
+                }
+              `}
+            >
+              <Save className="w-4 h-4" />
+              <span className="text-sm">Save as Node</span>
+            </button>
+          </div>
+          
+          {/* Node Grid */}
+          {nodeCategories.map((category) => (
+            <div key={category.name}>
+              <h4 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
+                {category.name}
+              </h4>
+              <div className="grid grid-cols-3 gap-2">
+                {category.nodes.map((template, index) => (
+                  <button
+                    key={`${template.type}-${template.label}-${index}`}
+                    onClick={() => handleAddNode(template)}
+                    className={`
+                      flex flex-col items-center gap-2 p-3 rounded-xl
+                      border ${template.border} ${template.bg}
+                      active:scale-95 transition-transform
+                    `}
+                  >
+                    <template.Icon className={`w-6 h-6 ${template.color}`} />
+                    <span className="text-xs font-medium text-white text-center">{template.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          
+          {/* Subflows */}
+          {savedSubflows.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <FolderTree className="w-3 h-3" />
+                Subflows
+              </h4>
+              <div className="grid grid-cols-2 gap-2">
+                {savedSubflows.map((subflow) => (
+                  <button
+                    key={subflow.id}
+                    onClick={() => handleAddSubflow(subflow)}
+                    className="flex items-center gap-2 p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 active:scale-95 transition-transform"
+                  >
+                    <Workflow className="w-5 h-5 text-indigo-400" />
+                    <span className="text-sm font-medium text-white truncate">{subflow.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Save As Node Dialog */}
+        <SaveAsNodeDialog
+          isOpen={showSaveDialog}
+          onClose={() => setShowSaveDialog(false)}
+          onSave={handleSaveAsSubflow}
+          validationError={validationError}
+        />
+      </>
+    );
+  }
+
+  // Desktop layout
   return (
     <>
       <div className="absolute top-4 left-4 z-10 w-56">

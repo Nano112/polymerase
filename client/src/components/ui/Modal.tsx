@@ -22,7 +22,7 @@ const sizeClasses = {
   md: 'max-w-2xl',
   lg: 'max-w-4xl',
   xl: 'max-w-6xl',
-  full: 'max-w-[95vw] max-h-[95vh]',
+  full: 'max-w-full max-h-full sm:max-w-[95vw] sm:max-h-[95vh]',
 };
 
 export function Modal({
@@ -63,10 +63,12 @@ export function Modal({
   }, []);
 
   if (!isOpen) return null;
+  
+  const isFullSize = size === 'full';
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center ${isFullSize ? 'p-0 sm:p-4' : 'p-4'}`}
       onKeyDown={handleKeyDown}
       onKeyUp={(e) => e.stopPropagation()}
     >
@@ -81,34 +83,35 @@ export function Modal({
         className={`
           relative w-full ${sizeClasses[size]}
           bg-neutral-900 border border-neutral-800/50
-          rounded-2xl shadow-2xl
+          ${isFullSize ? 'rounded-none sm:rounded-2xl h-full sm:h-auto' : 'rounded-2xl'}
+          shadow-2xl
           animate-scale-in
           flex flex-col
-          max-h-[90vh]
+          ${isFullSize ? 'max-h-full sm:max-h-[90vh]' : 'max-h-[90vh]'}
         `}
       >
         {/* Header */}
         {(title || showCloseButton) && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800/50 flex-shrink-0">
-            <div className="flex items-center gap-3">
+          <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800/50 flex-shrink-0 ${isFullSize ? 'safe-area-top' : ''}`}>
+            <div className="flex items-center gap-3 min-w-0">
               {icon && (
-                <div className={`flex items-center justify-center w-10 h-10 rounded-xl bg-neutral-800/50 ${iconColor}`}>
+                <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-neutral-800/50 ${iconColor} flex-shrink-0`}>
                   {icon}
                 </div>
               )}
-              <div>
+              <div className="min-w-0">
                 {title && (
-                  <h2 className="text-lg font-semibold text-white">{title}</h2>
+                  <h2 className="text-base sm:text-lg font-semibold text-white truncate">{title}</h2>
                 )}
                 {subtitle && (
-                  <p className="text-sm text-neutral-400">{subtitle}</p>
+                  <p className="text-xs sm:text-sm text-neutral-400 truncate">{subtitle}</p>
                 )}
               </div>
             </div>
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors flex-shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
