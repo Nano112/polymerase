@@ -59,6 +59,10 @@ html, body, #root {
   box-shadow: none !important;
 }
 
+.react-flow__node.selected > * {
+  /* Let the node component handle its own selection styling */
+}
+
 /* Remove default node wrapper styles */
 .react-flow__node-default,
 .react-flow__node-input,

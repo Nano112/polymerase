@@ -289,6 +289,34 @@ export function Editor() {
           }
         }
 
+        // Handle output nodes - they receive data and mark it as a flow output
+        if (node.type === 'output' || node.type === 'file_output') {
+          const incomingEdge = edges.find(e => e.target === node.id);
+          if (incomingEdge) {
+            const sourceOutput = nodeOutputs.get(incomingEdge.source);
+            if (sourceOutput) {
+              // Unwrap if it's a single output
+              let outputValue: unknown = sourceOutput;
+              const handleKey = incomingEdge.sourceHandle || 'default';
+              
+              if (handleKey in sourceOutput) {
+                outputValue = sourceOutput[handleKey];
+              } else {
+                const keys = Object.keys(sourceOutput);
+                if (keys.length === 1) {
+                  outputValue = sourceOutput[keys[0]];
+                }
+              }
+              
+              // Set the output node's cache
+              setNodeExecutionStatus(node.id, 'completed', { output: outputValue, default: outputValue });
+              
+              // Store for downstream nodes (in case of chaining)
+              nodeOutputs.set(node.id, { output: outputValue, default: outputValue });
+            }
+          }
+        }
+
         // Handle subflow nodes - execute the embedded flow
         if (node.type === 'subflow') {
           const subflowData = node.data as { 
@@ -467,8 +495,16 @@ export function Editor() {
 
   // Handle keyboard shortcuts
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
+    // Don't delete nodes when user is typing in an input field
+    const target = event.target as HTMLElement;
+    const isInputElement = target.tagName === 'INPUT' || 
+                           target.tagName === 'TEXTAREA' || 
+                           target.isContentEditable ||
+                           target.closest('input, textarea, [contenteditable="true"]');
+    
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      if (selectedNodeId && !showCodeEditor && !showNodeProperties) {
+      // Only delete node if not in an input element and modals are closed
+      if (selectedNodeId && !showCodeEditor && !showNodeProperties && !isInputElement) {
         deleteNode(selectedNodeId);
       }
     }

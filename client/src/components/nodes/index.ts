@@ -4,6 +4,7 @@
 
 import CodeNode from './CodeNode';
 import InputNode from './InputNode';
+import OutputNode from './OutputNode';
 import SchematicNode from './SchematicNode';
 import ViewerNode from './ViewerNode';
 import FileInputNode from './FileInputNode';
@@ -14,9 +15,9 @@ export const nodeTypes = {
   // Core nodes
   code: CodeNode,
   
-  // Universal file I/O nodes
+  // Universal I/O nodes
   file_input: FileInputNode,
-  file_output: FileOutputNode,
+  output: OutputNode,
   
   // Unified input node - handles primitive data types
   input: InputNode,
@@ -34,10 +35,13 @@ export const nodeTypes = {
   boolean_input: InputNode,
   select_input: InputNode,
   
-  // Legacy schematic nodes (deprecated - use file_input/file_output)
+  // Legacy nodes (deprecated - use output node)
+  file_output: FileOutputNode,
+  
+  // Legacy schematic nodes (deprecated - use file_input/output)
   schematic_input: SchematicNode,
   schematic_output: SchematicNode,
   schematic_viewer: SchematicNode,
 };
 
-export { CodeNode, InputNode, SchematicNode, ViewerNode, FileInputNode, FileOutputNode, SubflowNode };
+export { CodeNode, InputNode, OutputNode, SchematicNode, ViewerNode, FileInputNode, FileOutputNode, SubflowNode };

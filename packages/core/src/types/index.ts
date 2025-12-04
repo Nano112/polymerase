@@ -129,6 +129,7 @@ export type NodeType =
   | 'code'              // Synthase script execution
   | 'file_input'        // Load any supported file type
   | 'file_output'       // Export any supported file type
+  | 'output'            // Generic output (subflow return value)
   | 'viewer'            // Preview any data type
   | 'subflow'           // Embedded flow (reusable node)
   // Primitive inputs
@@ -667,14 +668,21 @@ export interface ExtractedSubflowConfig {
  */
 export function extractSubflowConfig(flow: FlowData): ExtractedSubflowConfig {
   const inputNodes = flow.nodes.filter(n => 
-    n.type.endsWith('_input') || n.type === 'input' || n.type === 'file_input'
+    n.type?.endsWith('_input') || n.type === 'input' || n.type === 'file_input'
   );
   
-  // Look for viewer nodes with passthrough OR file_output nodes
-  const outputNodes = flow.nodes.filter(n => 
-    n.type === 'file_output' || 
-    (n.type === 'viewer' && n.data.config?.passthrough === true)
-  );
+  // Look for output nodes, viewer nodes with passthrough, OR file_output nodes (legacy)
+  const outputNodes = flow.nodes.filter(n => {
+    if (n.type === 'output') return true;
+    if (n.type === 'file_output') return true;
+    if (n.type === 'viewer') {
+      // Check multiple possible locations for passthrough flag
+      const nodeData = n.data as any;
+      return nodeData?.passthrough === true || 
+             nodeData?.config?.passthrough === true;
+    }
+    return false;
+  });
   
   if (inputNodes.length === 0) {
     return {
@@ -726,13 +734,19 @@ export function extractSubflowConfig(flow: FlowData): ExtractedSubflowConfig {
  * Infer the data type for a port based on node configuration
  */
 function inferPortType(node: NodeData): string {
+  const nodeData = node.data as any;
+  
+  // Check for explicit dataType first
+  if (nodeData?.dataType) return nodeData.dataType;
+  if (nodeData?.config?.dataType) return nodeData.config.dataType;
+  
   switch (node.type) {
     case 'number_input': return 'number';
     case 'text_input': return 'string';
     case 'boolean_input': return 'boolean';
     case 'file_input': return 'file';
     case 'file_output': return 'file';
-    case 'input': return (node.data.config?.dataType as string) || 'any';
+    case 'input': return (nodeData?.config?.dataType as string) || (nodeData?.dataType as string) || 'any';
     case 'viewer': return 'any';
     default: return 'any';
   }
