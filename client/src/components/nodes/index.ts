@@ -8,6 +8,7 @@ import SchematicNode from './SchematicNode';
 import ViewerNode from './ViewerNode';
 import FileInputNode from './FileInputNode';
 import FileOutputNode from './FileOutputNode';
+import SubflowNode from './SubflowNode';
 
 export const nodeTypes = {
   // Core nodes
@@ -23,6 +24,9 @@ export const nodeTypes = {
   // Viewer node - accepts any input
   viewer: ViewerNode,
   
+  // Subflow node - embedded reusable flows
+  subflow: SubflowNode,
+  
   // Legacy support for specific input types
   static_input: InputNode,
   number_input: InputNode,
@@ -36,4 +40,4 @@ export const nodeTypes = {
   schematic_viewer: SchematicNode,
 };
 
-export { CodeNode, InputNode, SchematicNode, ViewerNode, FileInputNode, FileOutputNode };
+export { CodeNode, InputNode, SchematicNode, ViewerNode, FileInputNode, FileOutputNode, SubflowNode };

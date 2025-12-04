@@ -78,6 +78,47 @@ export interface FlowMetadata {
   description?: string;
   author?: string;
   tags?: string[];
+  // Subflow metadata - when this flow is used as a node
+  isSubflow?: boolean;
+  subflowConfig?: SubflowConfig;
+}
+
+/**
+ * Configuration for a flow that can be used as a subflow node
+ */
+export interface SubflowConfig {
+  /** Display name when used as a node */
+  nodeName: string;
+  /** Category for grouping in toolbar */
+  category?: string;
+  /** Color theme for the node */
+  color?: string;
+  /** Icon name (from lucide-react) */
+  icon?: string;
+  /** Version of the subflow definition */
+  version?: string;
+  /** Input port definitions (derived from input nodes in the flow) */
+  inputs: SubflowPort[];
+  /** Output port definitions (derived from output nodes in the flow) */
+  outputs: SubflowPort[];
+}
+
+/**
+ * Definition of an input/output port for a subflow
+ */
+export interface SubflowPort {
+  /** Port identifier (used as handle ID) */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Expected data type */
+  type: string;
+  /** Description for tooltip */
+  description?: string;
+  /** Default value (for inputs) */
+  defaultValue?: unknown;
+  /** Whether this port is required (for inputs) */
+  required?: boolean;
 }
 
 // ============================================================================
@@ -89,6 +130,7 @@ export type NodeType =
   | 'file_input'        // Load any supported file type
   | 'file_output'       // Export any supported file type
   | 'viewer'            // Preview any data type
+  | 'subflow'           // Embedded flow (reusable node)
   // Primitive inputs
   | 'static_input'      // Static value input
   | 'number_input'      // Number slider/input
@@ -577,6 +619,123 @@ export function isSchematicNode(node: NodeData): boolean {
 
 export function isFileNode(node: NodeData): boolean {
   return node.type === 'file_input' || node.type === 'file_output';
+}
+
+export function isSubflowNode(node: NodeData): boolean {
+  return node.type === 'subflow';
+}
+
+// ============================================================================
+// Subflow Types
+// ============================================================================
+
+/**
+ * Data stored in a subflow node
+ */
+export interface SubflowNodeData {
+  /** Display label */
+  label?: string;
+  /** Reference to the source flow ID */
+  flowId: string;
+  /** Cached subflow configuration (from the source flow's metadata) */
+  config: SubflowConfig;
+  /** The complete flow definition (embedded for execution) */
+  flowDefinition?: FlowData;
+  /** Whether the subflow is expanded (shows internal flow) */
+  expanded?: boolean;
+}
+
+/**
+ * Result of extracting subflow configuration from a flow
+ */
+export interface ExtractedSubflowConfig {
+  /** Whether extraction was successful */
+  valid: boolean;
+  /** Error message if not valid */
+  error?: string;
+  /** The extracted configuration */
+  config?: SubflowConfig;
+  /** Input nodes found in the flow */
+  inputNodes?: NodeData[];
+  /** Output/viewer nodes found in the flow */
+  outputNodes?: NodeData[];
+}
+
+/**
+ * Extract subflow configuration from a flow definition
+ * Analyzes input and output nodes to determine the interface
+ */
+export function extractSubflowConfig(flow: FlowData): ExtractedSubflowConfig {
+  const inputNodes = flow.nodes.filter(n => 
+    n.type.endsWith('_input') || n.type === 'input' || n.type === 'file_input'
+  );
+  
+  // Look for viewer nodes with passthrough OR file_output nodes
+  const outputNodes = flow.nodes.filter(n => 
+    n.type === 'file_output' || 
+    (n.type === 'viewer' && n.data.config?.passthrough === true)
+  );
+  
+  if (inputNodes.length === 0) {
+    return {
+      valid: false,
+      error: 'Flow must have at least one input node to be used as a subflow'
+    };
+  }
+  
+  if (outputNodes.length === 0) {
+    return {
+      valid: false,
+      error: 'Flow must have at least one output node (viewer with passthrough or file output) to be used as a subflow'
+    };
+  }
+  
+  // Build input ports
+  const inputs: SubflowPort[] = inputNodes.map(node => ({
+    id: node.id,
+    name: node.data.label || node.id,
+    type: inferPortType(node),
+    description: node.data.config?.description as string | undefined,
+    defaultValue: node.data.value,
+    required: !(node.data.config?.optional === true)
+  }));
+  
+  // Build output ports
+  const outputs: SubflowPort[] = outputNodes.map(node => ({
+    id: node.id,
+    name: node.data.label || node.id,
+    type: inferPortType(node),
+    description: node.data.config?.description as string | undefined
+  }));
+  
+  return {
+    valid: true,
+    config: {
+      nodeName: flow.name,
+      category: flow.metadata?.tags?.[0] || 'Custom',
+      version: flow.version,
+      inputs,
+      outputs
+    },
+    inputNodes,
+    outputNodes
+  };
+}
+
+/**
+ * Infer the data type for a port based on node configuration
+ */
+function inferPortType(node: NodeData): string {
+  switch (node.type) {
+    case 'number_input': return 'number';
+    case 'text_input': return 'string';
+    case 'boolean_input': return 'boolean';
+    case 'file_input': return 'file';
+    case 'file_output': return 'file';
+    case 'input': return (node.data.config?.dataType as string) || 'any';
+    case 'viewer': return 'any';
+    default: return 'any';
+  }
 }
 
 // ============================================================================

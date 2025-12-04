@@ -14,6 +14,7 @@ import {
   addEdge,
 } from '@xyflow/react';
 import type { FlowData, IODefinition, NodeData } from '@polymerase/core';
+import { extractSubflowConfig } from '@polymerase/core';
 
 // ============================================================================
 // Types
@@ -64,6 +65,31 @@ export interface FlowNode extends Node {
     customFileName?: string;   // Custom output filename
     acceptedTypes?: string[];  // Accepted data categories for file input
     outputFormat?: string;     // Override output format
+    // Subflow node specific
+    flowId?: string;           // Reference to source flow
+    flowDefinition?: FlowData; // Embedded flow definition
+    expanded?: boolean;        // Whether subflow internals are shown
+    subflowConfig?: {          // Subflow port configuration
+      nodeName: string;
+      category?: string;
+      color?: string;
+      icon?: string;
+      version?: string;
+      inputs: Array<{
+        id: string;
+        name: string;
+        type: string;
+        description?: string;
+        defaultValue?: unknown;
+        required?: boolean;
+      }>;
+      outputs: Array<{
+        id: string;
+        name: string;
+        type: string;
+        description?: string;
+      }>;
+    };
   };
 }
 
@@ -120,6 +146,27 @@ interface FlowState {
   
   // Input node helpers
   getExposedInputs: () => FlowNode[];
+  
+  // Subflow operations
+  savedSubflows: SavedSubflow[];
+  saveAsSubflow: (name: string, category?: string) => SavedSubflow | null;
+  loadSubflows: () => void;
+  deleteSubflow: (id: string) => void;
+  addSubflowNode: (subflow: SavedSubflow, position: { x: number; y: number }) => void;
+}
+
+/**
+ * A saved subflow that can be used as a node
+ */
+export interface SavedSubflow {
+  id: string;
+  name: string;
+  category: string;
+  version: string;
+  flowDefinition: FlowData;
+  config: import('@polymerase/core').SubflowConfig;
+  createdAt: number;
+  updatedAt: number;
 }
 
 // ============================================================================
@@ -426,4 +473,90 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       node => node.type?.includes('input') && !node.data.isConstant
     );
   },
+  
+  // Subflow operations
+  savedSubflows: [],
+  
+  saveAsSubflow: (name: string, category: string = 'Custom') => {
+    const state = get();
+    const flow = state.exportFlow();
+    
+    // Validate and extract configuration
+    const extracted = extractSubflowConfig(flow);
+    if (!extracted.valid || !extracted.config) {
+      console.error('Cannot save as subflow:', extracted.error);
+      return null;
+    }
+    
+    const subflow: SavedSubflow = {
+      id: crypto.randomUUID(),
+      name,
+      category,
+      version: '1.0.0',
+      flowDefinition: flow,
+      config: {
+        ...extracted.config,
+        nodeName: name,
+        category,
+      },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    // Save to localStorage
+    const savedSubflows = [...state.savedSubflows, subflow];
+    localStorage.setItem('polymerase_subflows', JSON.stringify(savedSubflows));
+    
+    set({ savedSubflows });
+    return subflow;
+  },
+  
+  loadSubflows: () => {
+    try {
+      const stored = localStorage.getItem('polymerase_subflows');
+      if (stored) {
+        const subflows = JSON.parse(stored) as SavedSubflow[];
+        set({ savedSubflows: subflows });
+      }
+    } catch (e) {
+      console.error('Failed to load subflows:', e);
+    }
+  },
+  
+  deleteSubflow: (id: string) => {
+    const state = get();
+    const savedSubflows = state.savedSubflows.filter(s => s.id !== id);
+    localStorage.setItem('polymerase_subflows', JSON.stringify(savedSubflows));
+    set({ savedSubflows });
+  },
+  
+  addSubflowNode: (subflow: SavedSubflow, position: { x: number; y: number }) => {
+    const state = get();
+    const newNode: FlowNode = {
+      id: `subflow-${crypto.randomUUID().slice(0, 8)}`,
+      type: 'subflow',
+      position,
+      data: {
+        label: subflow.name,
+        flowId: subflow.id,
+        subflowConfig: subflow.config,
+        flowDefinition: subflow.flowDefinition,
+      },
+    };
+    
+    set({
+      nodes: [...state.nodes, newNode],
+      nodeCache: {
+        ...state.nodeCache,
+        [newNode.id]: { status: 'idle' },
+      },
+    });
+  },
 }));
+
+// Initialize subflows on store creation
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    useFlowStore.getState().loadSubflows();
+  }, 0);
+}

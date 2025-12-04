@@ -245,14 +245,172 @@ export function Editor() {
           }
         }
 
-        // Handle viewer nodes - they don't need execution, just receive data
+        // Handle viewer nodes - they receive data and can pass it through
         if (node.type === 'viewer') {
           const incomingEdge = edges.find(e => e.target === node.id);
           if (incomingEdge) {
             const sourceOutput = nodeOutputs.get(incomingEdge.source);
             if (sourceOutput) {
+              // Unwrap if it's a single output
+              let viewerValue: unknown = sourceOutput;
+              const keys = Object.keys(sourceOutput);
+              if (keys.length === 1) {
+                viewerValue = sourceOutput[keys[0]];
+              }
+              
+              // Set the viewer's cache
               setNodeExecutionStatus(node.id, 'completed', sourceOutput);
+              
+              // If passthrough is enabled, make output available to downstream nodes
+              const viewerData = node.data as { passthrough?: boolean };
+              if (viewerData.passthrough) {
+                // Store output for downstream nodes - wrap in 'output' key for the output handle
+                nodeOutputs.set(node.id, { output: viewerValue, default: viewerValue });
+              }
             }
+          }
+        }
+
+        // Handle subflow nodes - execute the embedded flow
+        if (node.type === 'subflow') {
+          const subflowData = node.data as { 
+            flowId: string; 
+            subflowConfig: { inputs: { id: string }[]; outputs: { id: string }[] };
+            flowDefinition?: { nodes: FlowNode[]; edges: Edge[] };
+          };
+          
+          if (!subflowData.flowDefinition) {
+            setNodeExecutionStatus(node.id, 'error', undefined, 'Subflow definition not loaded');
+            addExecutionLog(`[ERROR] Subflow "${node.data.label || node.id}": Definition not loaded`);
+            continue;
+          }
+          
+          // Mark as running
+          setExecutingNodeId(node.id);
+          setNodeExecutionStatus(node.id, 'running');
+          addExecutionLog(`Executing subflow "${node.data.label || 'Subflow'}"...`);
+          
+          try {
+            // Gather inputs for the subflow
+            const subflowInputs: Record<string, unknown> = {};
+            const incomingEdges = edges.filter(e => e.target === node.id);
+            
+            for (const edge of incomingEdges) {
+              const sourceOutput = nodeOutputs.get(edge.source);
+              if (sourceOutput) {
+                const inputPortId = edge.targetHandle;
+                if (inputPortId) {
+                  // Get the value from source output
+                  const outputKey = edge.sourceHandle || 'default';
+                  let value = sourceOutput[outputKey];
+                  if (value === undefined && Object.keys(sourceOutput).length === 1) {
+                    value = sourceOutput[Object.keys(sourceOutput)[0]];
+                  }
+                  subflowInputs[inputPortId] = value;
+                }
+              }
+            }
+            
+            // Execute the subflow's code nodes
+            // For now, we run them sequentially - could optimize with parallel execution
+            const subflowDef = subflowData.flowDefinition;
+            const subflowOrder = getExecutionOrder(subflowDef.nodes as FlowNode[], subflowDef.edges);
+            const subflowOutputs = new Map<string, Record<string, unknown>>();
+            
+            // Set input values from external inputs
+            for (const subNode of subflowOrder) {
+              if (subNode.type?.includes('input') && !subNode.type?.includes('schematic')) {
+                // Check if this input has an external value
+                const externalValue = subflowInputs[subNode.id];
+                if (externalValue !== undefined) {
+                  subflowOutputs.set(subNode.id, { default: externalValue });
+                } else {
+                  // Use the node's default value
+                  subflowOutputs.set(subNode.id, { default: subNode.data.value });
+                }
+              }
+            }
+            
+            // Execute code nodes in the subflow
+            for (const subNode of subflowOrder) {
+              if (subNode.type === 'code') {
+                const code = subNode.data.code;
+                if (!code) continue;
+                
+                // Gather inputs
+                const codeInputs: Record<string, unknown> = {};
+                const subIncomingEdges = subflowDef.edges.filter(e => e.target === subNode.id);
+                
+                for (const edge of subIncomingEdges) {
+                  const srcOutput = subflowOutputs.get(edge.source);
+                  if (srcOutput) {
+                    const inputName = edge.targetHandle || 'default';
+                    const outputKey = edge.sourceHandle || inputName;
+                    let val = srcOutput[outputKey];
+                    if (val === undefined && Object.keys(srcOutput).length === 1) {
+                      val = srcOutput[Object.keys(srcOutput)[0]];
+                    }
+                    codeInputs[inputName] = val;
+                  }
+                }
+                
+                // Execute
+                const result = await executeScript(code, codeInputs);
+                
+                if (result.success) {
+                  let finalResult: Record<string, unknown>;
+                  if (result.schematics && Object.keys(result.schematics).length > 0) {
+                    finalResult = {};
+                    for (const [key, value] of Object.entries(result.schematics)) {
+                      if (value) finalResult[key] = value;
+                    }
+                    if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                      finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
+                    }
+                  } else {
+                    finalResult = result.result || {};
+                  }
+                  subflowOutputs.set(subNode.id, finalResult);
+                } else {
+                  throw new Error(`Subflow code node error: ${result.error?.message}`);
+                }
+              }
+            }
+            
+            // Collect outputs from output nodes (viewers with passthrough or file_output)
+            const subflowResult: Record<string, unknown> = {};
+            
+            for (const outputPort of subflowData.subflowConfig.outputs) {
+              // Find the output node
+              const outputNode = subflowDef.nodes.find(n => n.id === outputPort.id);
+              if (outputNode) {
+                // Get the value coming into this output node
+                const outputIncomingEdge = subflowDef.edges.find(e => e.target === outputNode.id);
+                if (outputIncomingEdge) {
+                  const srcOutput = subflowOutputs.get(outputIncomingEdge.source);
+                  if (srcOutput) {
+                    const keys = Object.keys(srcOutput);
+                    const value = keys.length === 1 ? srcOutput[keys[0]] : srcOutput;
+                    subflowResult[outputPort.id] = value;
+                  }
+                }
+              }
+            }
+            
+            // Add default output if there's only one
+            if (Object.keys(subflowResult).length === 1 && !('default' in subflowResult)) {
+              subflowResult['default'] = subflowResult[Object.keys(subflowResult)[0]];
+            }
+            
+            nodeOutputs.set(node.id, subflowResult);
+            setNodeExecutionStatus(node.id, 'completed', subflowResult);
+            addExecutionLog(`[OK] Subflow "${node.data.label || 'Subflow'}" completed`);
+            
+          } catch (err) {
+            const error = err as Error;
+            setNodeExecutionStatus(node.id, 'error', undefined, error.message);
+            addExecutionLog(`[ERROR] Subflow "${node.data.label || 'Subflow'}": ${error.message}`);
+            break;
           }
         }
       }
@@ -487,6 +645,9 @@ export function Editor() {
                 case 'boolean_input':
                 case 'select_input': return '#a855f7';
                 case 'viewer': return '#ec4899';
+                case 'subflow': return '#6366f1';
+                case 'file_input': return '#f97316';
+                case 'file_output': return '#06b6d4';
                 case 'schematic_input': return '#f97316';
                 case 'schematic_output': return '#06b6d4';
                 case 'schematic_viewer': return '#ec4899';
