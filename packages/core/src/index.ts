@@ -63,8 +63,12 @@ export {
   MessageHandler,
   createContextProviders,
   createMinimalContextProviders,
+  WorkerDataStore,
+  workerDataStore,
+  DATA_STORE_MESSAGES,
   type WorkerClientOptions,
   type BunWorkerClientOptions,
+  type DataHandle,
 } from './worker/index.js';
 
 // Version

@@ -3,9 +3,10 @@
  * Used by both browser WebWorkers and Bun Worker Threads
  */
 
-import { MESSAGE_TYPES, type MessageType, type WorkerMessage, type SchematicData } from '../types/index.js';
+import { MESSAGE_TYPES, type MessageType, type WorkerMessage, type SchematicData, type DataHandle, type DataValue, type DataFormat } from '../types/index.js';
 import { SynthaseService } from '../services/SynthaseService.js';
 import { createContextProviders } from './contextProviders.js';
+import { workerDataStore, type StoreDataOptions, type SerializeOptions } from './WorkerDataStore.js';
 import type { IODefinition } from '../types/index.js';
 
 export interface MessageHandlerOptions {
@@ -61,6 +62,32 @@ export class MessageHandler {
         case MESSAGE_TYPES.CANCEL_EXECUTION:
           result = this.handleCancelExecution();
           this.sendMessage(MESSAGE_TYPES.EXECUTION_CANCELLED, result, id);
+          break;
+
+        // Data store operations
+        case MESSAGE_TYPES.STORE_DATA:
+          result = this.handleStoreData(payload as StoreDataPayload);
+          this.sendMessage(MESSAGE_TYPES.STORE_DATA_SUCCESS, result, id);
+          break;
+
+        case MESSAGE_TYPES.GET_DATA:
+          result = this.handleGetData(payload as GetDataPayload);
+          this.sendMessage(MESSAGE_TYPES.GET_DATA_SUCCESS, result, id);
+          break;
+
+        case MESSAGE_TYPES.GET_PREVIEW:
+          result = this.handleGetPreview(payload as GetDataPayload);
+          this.sendMessage(MESSAGE_TYPES.GET_PREVIEW_SUCCESS, result, id);
+          break;
+
+        case MESSAGE_TYPES.RELEASE_DATA:
+          result = this.handleReleaseData(payload as ReleaseDataPayload);
+          this.sendMessage(MESSAGE_TYPES.RELEASE_DATA_SUCCESS, result, id);
+          break;
+
+        case MESSAGE_TYPES.LIST_HANDLES:
+          result = this.handleListHandles();
+          this.sendMessage(MESSAGE_TYPES.LIST_HANDLES_SUCCESS, result, id);
           break;
 
         default:
@@ -215,6 +242,52 @@ export class MessageHandler {
     return { cancelled: false, message: 'No execution in progress' };
   }
 
+  // ==========================================================================
+  // Data Store Operations
+  // ==========================================================================
+
+  /**
+   * Store data in the worker and return a handle
+   */
+  private handleStoreData(payload: StoreDataPayload): DataHandle {
+    const { value, format, options } = payload;
+    return workerDataStore.store(value, format, options);
+  }
+
+  /**
+   * Get serialized data from a handle
+   */
+  private handleGetData(payload: GetDataPayload): DataValue | null {
+    const { handleId, options } = payload;
+    return workerDataStore.serialize(handleId, { fullData: true, ...options });
+  }
+
+  /**
+   * Get a preview of data from a handle (may be lower quality/smaller)
+   */
+  private handleGetPreview(payload: GetDataPayload): DataValue | null {
+    const { handleId, options } = payload;
+    return workerDataStore.serialize(handleId, { fullData: false, ...options });
+  }
+
+  /**
+   * Release a data handle
+   */
+  private handleReleaseData(payload: ReleaseDataPayload): { released: boolean } {
+    const released = workerDataStore.release(payload.handleId);
+    return { released };
+  }
+
+  /**
+   * List all data handles
+   */
+  private handleListHandles(): { handles: DataHandle[]; stats: ReturnType<typeof workerDataStore.stats> } {
+    return {
+      handles: workerDataStore.list(),
+      stats: workerDataStore.stats(),
+    };
+  }
+
   /**
    * Send a message to the main thread
    */
@@ -290,5 +363,21 @@ interface ExecuteScriptResult {
 
 interface ValidateScriptPayload {
   code: string;
+}
+
+// Data store payload types
+interface StoreDataPayload {
+  value: unknown;
+  format: DataFormat;
+  options?: StoreDataOptions;
+}
+
+interface GetDataPayload {
+  handleId: string;
+  options?: SerializeOptions;
+}
+
+interface ReleaseDataPayload {
+  handleId: string;
 }
 

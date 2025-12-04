@@ -17,7 +17,8 @@ import {
 import { useFlowStore } from '../../store/flowStore';
 import { Modal } from '../ui/Modal';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3000';
+// Use empty string for dev (Vite proxy handles /api), or VITE_SERVER_URL for production
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? '';
 
 interface FlowListItem {
   id: string;

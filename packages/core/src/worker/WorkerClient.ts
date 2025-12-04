@@ -13,6 +13,10 @@ import {
   type WorkerConfig,
   type IODefinition,
   type ExecutionResult,
+  type DataHandle,
+  type DataValue,
+  type DataFormat,
+  type DataMetadata,
 } from '../types/index.js';
 
 export interface WorkerClientOptions extends WorkerConfig {
@@ -254,6 +258,72 @@ export class WorkerClient {
    */
   async getContextProviders(): Promise<Record<string, unknown>> {
     return (await this.sendMessage(MESSAGE_TYPES.GET_CONTEXT_PROVIDERS, {})) as Record<string, unknown>;
+  }
+
+  // ==========================================================================
+  // Data Store Methods - Keep data in worker, get handles instead
+  // ==========================================================================
+
+  /**
+   * Store data in the worker and get a lightweight handle
+   * Use this for large objects like schematics that don't need to be
+   * serialized until preview/export
+   */
+  async storeData(
+    value: unknown,
+    format: DataFormat,
+    options?: { name?: string; pinned?: boolean; metadata?: DataMetadata }
+  ): Promise<DataHandle> {
+    return (await this.sendMessage(MESSAGE_TYPES.STORE_DATA, {
+      value,
+      format,
+      options,
+    })) as DataHandle;
+  }
+
+  /**
+   * Get full serialized data from a handle
+   * Use sparingly - prefer getPreview for display purposes
+   */
+  async getData(handleId: string): Promise<DataValue | null> {
+    return (await this.sendMessage(MESSAGE_TYPES.GET_DATA, {
+      handleId,
+      options: { fullData: true },
+    })) as DataValue | null;
+  }
+
+  /**
+   * Get a preview of data from a handle
+   * May be lower quality/smaller for performance
+   */
+  async getPreview(handleId: string, maxDimension?: number): Promise<DataValue | null> {
+    return (await this.sendMessage(MESSAGE_TYPES.GET_PREVIEW, {
+      handleId,
+      options: { fullData: false, maxDimension },
+    })) as DataValue | null;
+  }
+
+  /**
+   * Release a data handle and free memory in worker
+   */
+  async releaseData(handleId: string): Promise<boolean> {
+    const result = (await this.sendMessage(MESSAGE_TYPES.RELEASE_DATA, {
+      handleId,
+    })) as { released: boolean };
+    return result.released;
+  }
+
+  /**
+   * List all data handles in the worker store
+   */
+  async listHandles(): Promise<{
+    handles: DataHandle[];
+    stats: { used: number; max: number; count: number };
+  }> {
+    return (await this.sendMessage(MESSAGE_TYPES.LIST_HANDLES, {})) as {
+      handles: DataHandle[];
+      stats: { used: number; max: number; count: number };
+    };
   }
 
   /**

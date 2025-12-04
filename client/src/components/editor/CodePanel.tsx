@@ -10,7 +10,8 @@ import { Zap, Info, ArrowRight, CheckCircle, XCircle, Loader2, Plus, Save, Alert
 import { useFlowStore } from '../../store/flowStore';
 import type { IODefinition } from '@polymerase/core';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3000';
+// Use empty string for dev (Vite proxy handles /api), or VITE_SERVER_URL for production
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? '';
 
 interface CodePanelProps {
   nodeId: string;

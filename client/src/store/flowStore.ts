@@ -58,6 +58,12 @@ export interface FlowNode extends Node {
     description?: string;      // Input description
     // Viewer node specific
     passthrough?: boolean;     // If true, viewer passes value to output
+    // File input/output node specific
+    fileData?: unknown;        // Loaded file data (DataValue)
+    fileName?: string;         // Original filename
+    customFileName?: string;   // Custom output filename
+    acceptedTypes?: string[];  // Accepted data categories for file input
+    outputFormat?: string;     // Override output format
   };
 }
 

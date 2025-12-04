@@ -9,8 +9,8 @@ import {
   Hash, 
   Type, 
   ToggleLeft, 
-  FolderOpen, 
-  Save, 
+  Upload,
+  Download,
   Eye,
   ChevronDown,
   ChevronUp,
@@ -96,22 +96,22 @@ const nodeCategories: { name: string; nodes: NodeTemplate[] }[] = [
     ],
   },
   {
-    name: 'Schematics',
+    name: 'Files',
     nodes: [
       {
-        type: 'schematic_input',
-        label: 'Load',
-        Icon: FolderOpen,
-        description: 'Load schematic file',
+        type: 'file_input',
+        label: 'File Input',
+        Icon: Upload,
+        description: 'Load any file (schematic, image, CSV, etc.)',
         color: 'text-orange-400',
         bg: 'bg-orange-500/10',
         border: 'border-orange-500/20',
       },
       {
-        type: 'schematic_output',
-        label: 'Save',
-        Icon: Save,
-        description: 'Export schematic file',
+        type: 'file_output',
+        label: 'File Output',
+        Icon: Download,
+        description: 'Export/download file',
         color: 'text-cyan-400',
         bg: 'bg-cyan-500/10',
         border: 'border-cyan-500/20',
@@ -164,7 +164,7 @@ export function Toolbar() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     Logic: true,
     Inputs: true,
-    Schematics: false,
+    Files: true,
   });
 
   const toggleCategory = (name: string) => {
@@ -265,7 +265,7 @@ export function Toolbar() {
         {/* Help tip */}
         <div className="px-4 py-3 border-t border-neutral-800/50 bg-neutral-900/50">
           <p className="text-[10px] text-neutral-500">
-            Input nodes have widget settings (gear icon) to change between slider/field
+            File Input supports schematics, images, CSV, JSON and more
           </p>
         </div>
       </div>
