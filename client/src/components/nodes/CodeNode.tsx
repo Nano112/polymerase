@@ -7,6 +7,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Zap, Code, CheckCircle, Loader2, AlertCircle, Clock } from 'lucide-react';
 import type { IODefinition } from '@polymerase/core';
 import { useFlowStore, type NodeExecutionStatus } from '../../store/flowStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CodeNodeData {
   label?: string;
@@ -58,27 +59,29 @@ const StatusIndicator = ({ status }: { status: NodeExecutionStatus }) => {
 
 const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData }) => {
   const selectNode = useFlowStore((state) => state.selectNode);
-  const nodeCache = useFlowStore((state) => state.nodeCache);
-  const executingNodeId = useFlowStore((state) => state.executingNodeId);
-  const edges = useFlowStore((state) => state.edges);
+  
+  // Optimized selectors to prevent unnecessary re-renders
+  const cache = useFlowStore(useShallow((state) => state.nodeCache[id]));
+  const isExecuting = useFlowStore((state) => state.executingNodeId === id);
+  const connectedInputs = useFlowStore(useShallow((state) => {
+    const connected = new Set<string>();
+    state.edges.forEach(e => {
+      if (e.target === id && e.targetHandle) {
+        connected.add(e.targetHandle);
+      }
+    });
+    return connected;
+  }));
+
   const [isHovered, setIsHovered] = useState(false);
 
-  // Refs and measurement logic removed - handles are now nested in labels for automatic alignment
-
-  const cache = nodeCache[id];
   const status = cache?.status || 'idle';
-  const isExecuting = executingNodeId === id;
 
   const inputs = data.io?.inputs || {};
   const outputs = data.io?.outputs || {};
 
   const inputHandles = Object.entries(inputs);
   const outputHandles = Object.entries(outputs);
-
-  // Check which inputs are connected
-  const connectedInputs = new Set(
-    edges.filter(e => e.target === id).map(e => e.targetHandle)
-  );
 
 
   const handleClick = useCallback(() => {
@@ -185,18 +188,37 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
 
         {/* Code Preview */}
         <div className="p-3 flex-1 min-w-0">
-          <div className="bg-neutral-950/50 rounded-lg p-3 font-mono text-xs text-neutral-400 max-h-16 overflow-hidden border border-neutral-800/30">
+          <div className="bg-neutral-950/50 rounded-lg p-3 font-mono text-xs text-neutral-400 max-h-32 overflow-hidden border border-neutral-800/30 relative group">
             {data.code ? (
-              <div className="flex items-start gap-2">
-                <Code className="w-3 h-3 mt-0.5 text-neutral-500 flex-shrink-0" />
-                <pre className="whitespace-pre-wrap break-all flex-1 text-[10px]">
-                  {data.code.slice(0, 60)}
-                  {data.code.length > 60 ? '...' : ''}
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-[2px] pt-[1px] select-none border-r border-neutral-800/50 pr-2">
+                  {data.code.split('\n').slice(0, 8).map((_, i) => (
+                    <div key={i} className="text-[9px] text-neutral-700 text-right w-3 leading-relaxed">{i + 1}</div>
+                  ))}
+                </div>
+                <pre className="whitespace-pre-wrap break-all flex-1 text-[10px] leading-relaxed text-neutral-300">
+                  {data.code.split('\n').slice(0, 8).map((line, i) => (
+                    <div key={i}>
+                      {line || <br />}
+                    </div>
+                  ))}
+                  {data.code.split('\n').length > 8 && (
+                    <div className="text-neutral-600 mt-1 italic text-[9px] flex items-center gap-1">
+                      <span>... {data.code.split('\n').length - 8} more lines</span>
+                    </div>
+                  )}
                 </pre>
               </div>
             ) : (
-              <span className="text-neutral-600 italic text-[10px]">Double-click to edit</span>
+              <div className="flex items-center gap-2 text-neutral-600 italic text-[10px] py-2 justify-center">
+                <Code className="w-3 h-3" />
+                <span>Double-click to edit code</span>
+              </div>
             )}
+            
+            {/* Hover overlay to indicate editable */}
+            <div className="absolute inset-0 bg-neutral-900/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+            </div>
           </div>
 
           {/* IO Summary & Status */}

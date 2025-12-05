@@ -97,19 +97,22 @@ function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestMod
             type="number"
             value={(value as number) ?? 0}
             onChange={(e) => handleInputChange(port.id, parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded text-sm text-white"
+            className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
           />
         );
       case 'boolean':
         return (
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-neutral-800/50 transition-colors border border-transparent hover:border-neutral-800">
+            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${value ? 'bg-indigo-500 border-indigo-500' : 'bg-neutral-900 border-neutral-700'}`}>
+              {value && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+            </div>
             <input
               type="checkbox"
               checked={(value as boolean) ?? false}
               onChange={(e) => handleInputChange(port.id, e.target.checked)}
-              className="w-4 h-4 rounded border-neutral-700 bg-neutral-800"
+              className="hidden"
             />
-            <span className="text-sm text-neutral-400">{value ? 'true' : 'false'}</span>
+            <span className="text-sm text-neutral-300">{value ? 'True' : 'False'}</span>
           </label>
         );
       case 'string':
@@ -120,7 +123,7 @@ function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestMod
             value={(value as string) ?? ''}
             onChange={(e) => handleInputChange(port.id, e.target.value)}
             placeholder={port.description || port.name}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded text-sm text-white"
+            className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
           />
         );
     }
@@ -140,25 +143,32 @@ function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestMod
         {/* Mock Inputs */}
         {inputs.length > 0 ? (
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-neutral-300">Mock Inputs</h4>
-            <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-neutral-300">Input Parameters</h4>
+              <span className="text-xs text-neutral-500">{inputs.length} inputs configured</span>
+            </div>
+            <div className="grid gap-4 p-4 bg-neutral-900/50 rounded-xl border border-neutral-800/50">
               {inputs.map((port) => (
-                <div key={port.id} className="space-y-1">
-                  <label className="flex items-center gap-2 text-sm text-neutral-400">
-                    <span className="font-medium">{port.name}</span>
-                    <span className="text-xs text-neutral-500">({port.type})</span>
-                  </label>
+                <div key={port.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-neutral-400">
+                      {port.name}
+                    </label>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-500 font-mono">
+                      {port.type}
+                    </span>
+                  </div>
                   {getInputWidget(port)}
                   {port.description && (
-                    <p className="text-xs text-neutral-500">{port.description}</p>
+                    <p className="text-[10px] text-neutral-500">{port.description}</p>
                   )}
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="text-sm text-neutral-500 text-center py-4">
-            This subflow has no inputs
+          <div className="text-sm text-neutral-500 text-center py-8 bg-neutral-900/30 rounded-xl border border-neutral-800/30 border-dashed">
+            This subflow has no inputs to configure
           </div>
         )}
         
@@ -166,40 +176,53 @@ function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestMod
         <button
           onClick={runTest}
           disabled={isRunning}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-lg transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-900/20"
         >
           {isRunning ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Running...
+              Running Simulation...
             </>
           ) : (
             <>
-              <Play className="w-4 h-4" />
-              Run Test
+              <Play className="w-4 h-4 fill-current" />
+              Run Test Simulation
             </>
           )}
         </button>
         
         {/* Results */}
         {testResult && (
-          <div className={`p-4 rounded-lg border ${
+          <div className={`p-4 rounded-xl border animate-in fade-in slide-in-from-bottom-2 duration-200 ${
             testResult.success 
-              ? 'bg-green-500/10 border-green-500/30' 
-              : 'bg-red-500/10 border-red-500/30'
+              ? 'bg-green-500/5 border-green-500/20' 
+              : 'bg-red-500/5 border-red-500/20'
           }`}>
-            <h4 className={`text-sm font-semibold mb-2 ${
-              testResult.success ? 'text-green-400' : 'text-red-400'
-            }`}>
-              {testResult.success ? 'Test Passed' : 'Test Failed'}
-            </h4>
+            <div className="flex items-center gap-2 mb-3">
+              {testResult.success ? (
+                <CheckCircle className="w-4 h-4 text-green-400" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-400" />
+              )}
+              <h4 className={`text-sm font-semibold ${
+                testResult.success ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {testResult.success ? 'Test Passed' : 'Test Failed'}
+              </h4>
+            </div>
+            
             {testResult.result !== undefined && (
-              <pre className="text-xs font-mono text-neutral-300 bg-neutral-900/50 p-2 rounded overflow-auto max-h-40">
-                {JSON.stringify(testResult.result, null, 2)}
-              </pre>
+              <div className="relative">
+                <div className="absolute top-2 right-2 text-[10px] text-neutral-500 font-mono">JSON</div>
+                <pre className="text-xs font-mono text-neutral-300 bg-neutral-950/50 p-3 rounded-lg overflow-auto max-h-40 border border-neutral-800/50">
+                  {JSON.stringify(testResult.result, null, 2)}
+                </pre>
+              </div>
             )}
             {testResult.error && (
-              <p className="text-sm text-red-400">{testResult.error}</p>
+              <p className="text-sm text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
+                {testResult.error}
+              </p>
             )}
           </div>
         )}
@@ -257,35 +280,60 @@ interface PortHandleProps {
 const PortHandle = memo(({ port, type, position, isConnected }: PortHandleProps) => {
   const getTypeColor = (portType: string) => {
     switch (portType) {
-      case 'number': return 'border-blue-500/50 bg-blue-500';
-      case 'string': return 'border-green-500/50 bg-green-500';
-      case 'boolean': return 'border-amber-500/50 bg-amber-500';
-      case 'file': return 'border-purple-500/50 bg-purple-500';
-      case 'schematic': return 'border-pink-500/50 bg-pink-500';
-      case 'any': return 'border-neutral-500/50 bg-neutral-400';
-      default: return 'border-neutral-500/50 bg-neutral-400';
+      case 'number': return 'bg-blue-500';
+      case 'string': return 'bg-green-500';
+      case 'boolean': return 'bg-amber-500';
+      case 'file': return 'bg-purple-500';
+      case 'schematic': return 'bg-pink-500';
+      case 'any': return 'bg-neutral-400';
+      default: return 'bg-neutral-400';
+    }
+  };
+
+  const getTypeBorderColor = (portType: string) => {
+    switch (portType) {
+      case 'number': return 'border-blue-500/20 bg-blue-500/10 text-blue-400';
+      case 'string': return 'border-green-500/20 bg-green-500/10 text-green-400';
+      case 'boolean': return 'border-amber-500/20 bg-amber-500/10 text-amber-400';
+      case 'file': return 'border-purple-500/20 bg-purple-500/10 text-purple-400';
+      case 'schematic': return 'border-pink-500/20 bg-pink-500/10 text-pink-400';
+      case 'any': return 'border-neutral-500/20 bg-neutral-500/10 text-neutral-400';
+      default: return 'border-neutral-500/20 bg-neutral-500/10 text-neutral-400';
     }
   };
   
   const isLeft = position === Position.Left;
+  const colorClass = getTypeColor(port.type);
+  const containerClass = isConnected 
+    ? getTypeBorderColor(port.type)
+    : 'text-neutral-400 bg-neutral-800/50 border-neutral-700/50';
   
   return (
-    <div className={`flex items-center gap-1.5 ${
-      isLeft ? 'flex-row justify-start' : 'flex-row-reverse justify-end'
-    }`}>
+    <div 
+      className={`
+        relative text-[11px] py-1.5 px-2 rounded border flex items-center gap-1.5
+        ${isLeft ? 'flex-row' : 'flex-row-reverse text-right'}
+        ${containerClass}
+      `}
+      title={`${port.name} (${port.type})${port.description ? `: ${port.description}` : ''}`}
+    >
       <Handle
         type={type}
         position={position}
         id={port.id}
+        style={{
+          top: '50%',
+          [isLeft ? 'left' : 'right']: '-19px',
+          transform: 'translateY(-50%)',
+        }}
         className={`
-          !relative !transform-none !top-auto !left-auto !right-auto
-          !w-2 !h-2 !rounded-full !border-2 !border-neutral-900
-          ${isConnected ? getTypeColor(port.type) : '!bg-neutral-700 !border-neutral-600'}
+          !w-3 !h-3 !border-2 !border-neutral-900
+          ${isConnected ? `!${colorClass}` : '!bg-neutral-600'}
           transition-all hover:!scale-125
         `}
-        title={`${port.name} (${port.type})${port.description ? `: ${port.description}` : ''}`}
       />
-      <span className="text-[10px] text-neutral-400 font-medium whitespace-nowrap">
+      <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? colorClass : 'bg-neutral-600'}`} />
+      <span className="font-medium whitespace-nowrap">
         {port.name}
       </span>
     </div>
@@ -300,36 +348,42 @@ PortHandle.displayName = 'PortHandle';
 
 const SubflowNode = memo(({ id, data, selected }: NodeProps & { data: SubflowNodeData }) => {
   const selectNode = useFlowStore((state) => state.selectNode);
-  const nodeCache = useFlowStore((state) => state.nodeCache);
-  const edges = useFlowStore((state) => state.edges);
   const executingNodeId = useFlowStore((state) => state.executingNodeId);
+  
+  // Standard selector for cache (reference equality is sufficient)
+  const cache = useFlowStore((state) => state.nodeCache[id]);
+  
+  // Optimized selector for connections using a stable string signature
+  // This prevents re-renders when unrelated edges change
+  const connectionSignature = useFlowStore((state) => {
+    const inputHandles: string[] = [];
+    const outputHandles: string[] = [];
+    
+    for (const e of state.edges) {
+      if (e.target === id && e.targetHandle) inputHandles.push(e.targetHandle);
+      if (e.source === id && e.sourceHandle) outputHandles.push(e.sourceHandle);
+    }
+    
+    return `${inputHandles.sort().join(',')}|${outputHandles.sort().join(',')}`;
+  });
+
+  const { connectedInputs, connectedOutputs } = useMemo(() => {
+    const [inputs, outputs] = connectionSignature.split('|');
+    return {
+      connectedInputs: new Set(inputs ? inputs.split(',') : []),
+      connectedOutputs: new Set(outputs ? outputs.split(',') : [])
+    };
+  }, [connectionSignature]);
+
   const [isHovered, setIsHovered] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
   
-  const cache = nodeCache[id];
   const status = cache?.status || 'idle';
   const isExecuting = executingNodeId === id;
   
   const config = data.subflowConfig;
   const inputs = config?.inputs || [];
   const outputs = config?.outputs || [];
-  
-  // Determine which handles are connected
-  const connectedInputs = useMemo(() => {
-    const connected = new Set<string>();
-    edges.filter(e => e.target === id).forEach(e => {
-      if (e.targetHandle) connected.add(e.targetHandle);
-    });
-    return connected;
-  }, [edges, id]);
-  
-  const connectedOutputs = useMemo(() => {
-    const connected = new Set<string>();
-    edges.filter(e => e.source === id).forEach(e => {
-      if (e.sourceHandle) connected.add(e.sourceHandle);
-    });
-    return connected;
-  }, [edges, id]);
   
   const handleClick = useCallback(() => {
     selectNode(id);

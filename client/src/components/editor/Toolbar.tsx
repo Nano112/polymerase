@@ -17,6 +17,9 @@ import {
   Save,
   Trash2,
   FolderTree,
+  PanelLeftClose,
+  PanelLeftOpen,
+  GripVertical
 } from 'lucide-react';
 import { useFlowStore, type FlowNode, type SavedSubflow } from '../../store/flowStore';
 import { extractSubflowConfig } from '@polymerase/core';
@@ -247,360 +250,246 @@ interface ToolbarProps {
   onNodeAdded?: () => void;
 }
 
-export function Toolbar({ isMobile = false, onNodeAdded }: ToolbarProps) {
-  const { 
-    addNode, 
-    nodes, 
-    edges,
-    setNodeOutput, 
-    savedSubflows, 
-    saveAsSubflow, 
-    deleteSubflow, 
-    addSubflowNode,
-    exportFlow
-  } = useFlowStore();
+export function Toolbar() {
+  const addNode = useFlowStore((state) => state.addNode);
+  const savedSubflows = useFlowStore((state) => state.savedSubflows);
+  const deleteSubflow = useFlowStore((state) => state.deleteSubflow);
   
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    Logic: true,
-    Inputs: true,
-    Files: false,
-    Subflows: true,
-  });
-  
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [validationError, setValidationError] = useState<string | undefined>();
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['Logic', 'Inputs', 'Outputs', 'Subflows']);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const toggleCategory = (name: string) => {
-    setExpandedCategories(prev => ({ ...prev, [name]: !prev[name] }));
-  };
-
-  // Check if current flow can be saved as a subflow
-  const canSaveAsSubflow = useMemo(() => {
-    const flow = exportFlow();
-    const extracted = extractSubflowConfig(flow);
-    return extracted.valid;
-  }, [exportFlow, nodes, edges]);
-  
-  // Get validation message
-  const subflowValidation = useMemo(() => {
-    const flow = exportFlow();
-    return extractSubflowConfig(flow);
-  }, [exportFlow, nodes, edges]);
-
-  // Group subflows by category
   const subflowsByCategory = useMemo(() => {
-    const grouped: Record<string, SavedSubflow[]> = {};
-    for (const subflow of savedSubflows) {
-      const cat = subflow.category || 'Custom';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(subflow);
-    }
-    return grouped;
+    const groups: Record<string, SavedSubflow[]> = {};
+    savedSubflows.forEach(subflow => {
+      const category = subflow.category || 'Custom';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(subflow);
+    });
+    return groups;
   }, [savedSubflows]);
 
-  const handleAddNode = useCallback(
-    (template: NodeTemplate) => {
-      const existingPositions = nodes.map((n) => n.position);
-      const maxX = existingPositions.reduce((max, p) => Math.max(max, p.x), 0);
-      const avgY = existingPositions.length > 0
-        ? existingPositions.reduce((sum, p) => sum + p.y, 0) / existingPositions.length
-        : 200;
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
 
-      const nodeId = `${template.type}-${Date.now()}`;
-      const isInputNode = template.type === 'input';
-      
-      const newNode: FlowNode = {
-        id: nodeId,
-        type: template.type,
-        position: { x: maxX + 280, y: avgY },
-        data: {
-          label: template.label,
-          code: template.type === 'code' ? getDefaultCode() : undefined,
-          value: template.defaultValue,
-          dataType: template.dataType,
-          ...template.config,
-        },
-      };
-
-      addNode(newNode);
-      
-      // For input nodes, immediately set their output as ready
-      if (isInputNode && template.defaultValue !== undefined) {
-        setTimeout(() => {
-          setNodeOutput(nodeId, { output: template.defaultValue });
-        }, 0);
-      }
-      
-      // Callback for mobile to close sheet
-      onNodeAdded?.();
-    },
-    [addNode, nodes, setNodeOutput, onNodeAdded]
-  );
+  const handleAddNode = useCallback((template: NodeTemplate) => {
+    const id = `${template.type}-${crypto.randomUUID().slice(0, 8)}`;
+    const newNode: FlowNode = {
+      id,
+      type: template.type,
+      position: { x: 100 + Math.random() * 100, y: 100 + Math.random() * 100 },
+      data: { 
+        label: template.label,
+        value: template.defaultValue,
+        dataType: template.dataType,
+        ...template.config
+      },
+    };
+    addNode(newNode);
+  }, [addNode]);
 
   const handleAddSubflow = useCallback((subflow: SavedSubflow) => {
-    const existingPositions = nodes.map((n) => n.position);
-    const maxX = existingPositions.reduce((max, p) => Math.max(max, p.x), 0);
-    const avgY = existingPositions.length > 0
-      ? existingPositions.reduce((sum, p) => sum + p.y, 0) / existingPositions.length
-      : 200;
-      
-    addSubflowNode(subflow, { x: maxX + 280, y: avgY });
-    onNodeAdded?.();
-  }, [nodes, addSubflowNode, onNodeAdded]);
+    const id = `subflow-${crypto.randomUUID().slice(0, 8)}`;
+    
+    // Extract config from the saved flow
+    const subflowConfig = extractSubflowConfig(subflow.flow);
+    
+    const newNode: FlowNode = {
+      id,
+      type: 'subflow',
+      position: { x: 100 + Math.random() * 100, y: 100 + Math.random() * 100 },
+      data: { 
+        label: subflow.name,
+        flowId: subflow.id,
+        subflowConfig
+      },
+    };
+    addNode(newNode);
+  }, [addNode]);
 
-  const handleSaveAsSubflow = useCallback((name: string, category: string) => {
-    const result = saveAsSubflow(name, category);
-    if (result) {
-      setShowSaveDialog(false);
-      setValidationError(undefined);
-    } else {
-      setValidationError(subflowValidation.error || 'Failed to save as subflow');
+  const onDragStart = (event: React.DragEvent, nodeType: string, template?: NodeTemplate, subflow?: SavedSubflow) => {
+    event.dataTransfer.setData('application/reactflow', nodeType);
+    
+    if (template) {
+      event.dataTransfer.setData('application/reactflow-data', JSON.stringify({
+        label: template.label,
+        value: template.defaultValue,
+        dataType: template.dataType,
+        ...template.config
+      }));
+    } else if (subflow) {
+      const subflowConfig = extractSubflowConfig(subflow.flow);
+      event.dataTransfer.setData('application/reactflow-data', JSON.stringify({
+        label: subflow.name,
+        flowId: subflow.id,
+        subflowConfig
+      }));
     }
-  }, [saveAsSubflow, subflowValidation]);
+    
+    event.dataTransfer.effectAllowed = 'move';
+  };
 
-  const handleOpenSaveDialog = useCallback(() => {
-    if (!canSaveAsSubflow) {
-      setValidationError(subflowValidation.error);
-    } else {
-      setValidationError(undefined);
-    }
-    setShowSaveDialog(true);
-  }, [canSaveAsSubflow, subflowValidation]);
-
-  // Mobile layout
-  if (isMobile) {
+  if (isCollapsed) {
     return (
-      <>
-        {/* Mobile Grid Layout */}
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Add Node</h3>
-            <button
-              onClick={handleOpenSaveDialog}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg transition-colors
-                ${canSaveAsSubflow 
-                  ? 'bg-indigo-500/20 text-indigo-400' 
-                  : 'bg-neutral-800 text-neutral-500'
-                }
-              `}
-            >
-              <Save className="w-4 h-4" />
-              <span className="text-sm">Save as Node</span>
-            </button>
-          </div>
-          
-          {/* Node Grid */}
-          {nodeCategories.map((category) => (
-            <div key={category.name}>
-              <h4 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
-                {category.name}
-              </h4>
-              <div className="grid grid-cols-3 gap-2">
-                {category.nodes.map((template, index) => (
-                  <button
-                    key={`${template.type}-${template.label}-${index}`}
-                    onClick={() => handleAddNode(template)}
-                    className={`
-                      flex flex-col items-center gap-2 p-3 rounded-xl
-                      border ${template.border} ${template.bg}
-                      active:scale-95 transition-transform
-                    `}
-                  >
-                    <template.Icon className={`w-6 h-6 ${template.color}`} />
-                    <span className="text-xs font-medium text-white text-center">{template.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          
-          {/* Subflows */}
-          {savedSubflows.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <FolderTree className="w-3 h-3" />
-                Subflows
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
-                {savedSubflows.map((subflow) => (
-                  <button
-                    key={subflow.id}
-                    onClick={() => handleAddSubflow(subflow)}
-                    className="flex items-center gap-2 p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 active:scale-95 transition-transform"
-                  >
-                    <Workflow className="w-5 h-5 text-indigo-400" />
-                    <span className="text-sm font-medium text-white truncate">{subflow.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Save As Node Dialog */}
-        <SaveAsNodeDialog
-          isOpen={showSaveDialog}
-          onClose={() => setShowSaveDialog(false)}
-          onSave={handleSaveAsSubflow}
-          validationError={validationError}
-        />
-      </>
+      <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg text-neutral-400 hover:text-white hover:border-neutral-700 shadow-lg transition-all"
+          title="Expand Toolbar"
+        >
+          <PanelLeftOpen className="w-5 h-5" />
+        </button>
+      </div>
     );
   }
 
-  // Desktop layout
   return (
-    <>
-      <div className="absolute top-4 left-4 z-10 w-56">
-        <div className="bg-neutral-900/90 backdrop-blur-xl rounded-xl border border-neutral-800/50 shadow-2xl overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-neutral-800/50 flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-              Add Node
-            </h3>
+    <div className="absolute left-4 top-4 bottom-4 w-64 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-xl shadow-2xl flex flex-col z-10 animate-in slide-in-from-left-4 duration-200">
+      <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+        <h2 className="font-semibold text-white flex items-center gap-2">
+          <Zap className="w-4 h-4 text-indigo-400" />
+          Nodes
+        </h2>
+        <button
+          onClick={() => setIsCollapsed(true)}
+          className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-500 hover:text-neutral-300 transition-colors"
+          title="Collapse Toolbar"
+        >
+          <PanelLeftClose className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Categories */}
+      <div className="p-2 space-y-1 max-h-[70vh] overflow-y-auto">
+        {/* Built-in node categories */}
+        {nodeCategories.map((category) => (
+          <div key={category.name}>
             <button
-              onClick={handleOpenSaveDialog}
-              className={`
-                p-1.5 rounded-lg transition-colors
-                ${canSaveAsSubflow 
-                  ? 'text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300' 
-                  : 'text-neutral-600 hover:text-neutral-500'
-                }
-              `}
-              title={canSaveAsSubflow ? 'Save flow as reusable node' : 'Add inputs and outputs to save as node'}
+              onClick={() => toggleCategory(category.name)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 transition-colors rounded-lg hover:bg-neutral-800/50"
             >
-              <Save className="w-4 h-4" />
+              <span>{category.name}</span>
+              {expandedCategories.includes(category.name) ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
             </button>
-          </div>
 
-          {/* Categories */}
-          <div className="p-2 space-y-1 max-h-[70vh] overflow-y-auto">
-            {/* Built-in node categories */}
-            {nodeCategories.map((category) => (
-              <div key={category.name}>
-                <button
-                  onClick={() => toggleCategory(category.name)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 transition-colors rounded-lg hover:bg-neutral-800/50"
-                >
-                  <span>{category.name}</span>
-                  {expandedCategories[category.name] ? (
-                    <ChevronUp className="w-3 h-3" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" />
-                  )}
-                </button>
-
-                {expandedCategories[category.name] && (
-                  <div className="mt-1 space-y-1 ml-2">
-                    {category.nodes.map((template, index) => (
-                      <button
-                        key={`${template.type}-${template.label}-${index}`}
-                        onClick={() => handleAddNode(template)}
-                        className={`
-                          w-full flex items-center gap-3 px-3 py-2 rounded-lg
-                          border ${template.border} ${template.bg}
-                          hover:scale-[1.02] active:scale-[0.98]
-                          transition-all duration-150
-                          group
-                        `}
-                        title={template.description}
-                      >
-                        <template.Icon className={`w-4 h-4 ${template.color}`} />
-                        <div className="flex-1 text-left">
-                          <span className="text-sm font-medium text-white">{template.label}</span>
-                        </div>
-                      </button>
-                    ))}
+            {expandedCategories.includes(category.name) && (
+              <div className="mt-1 space-y-1 ml-2">
+                {category.nodes.map((node) => (
+                  <div
+                    key={node.type + node.label}
+                    draggable
+                    onDragStart={(event) => onDragStart(event, node.type, node)}
+                    onClick={() => handleAddNode(node)}
+                    className={`
+                      group flex items-center gap-3 p-2.5 rounded-lg border border-transparent
+                      hover:border-neutral-700 hover:bg-neutral-800/50 cursor-grab active:cursor-grabbing transition-all
+                      ${node.bg} bg-opacity-5
+                    `}
+                  >
+                    <div className={`p-2 rounded-md ${node.bg} ${node.border} border`}>
+                      <node.Icon className={`w-4 h-4 ${node.color}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">
+                        {node.label}
+                      </div>
+                      <div className="text-[10px] text-neutral-500 truncate">
+                        {node.description}
+                      </div>
+                    </div>
+                    <GripVertical className="w-4 h-4 text-neutral-700 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
+          </div>
+        ))}
 
-            {/* Subflows section */}
-            {savedSubflows.length > 0 && (
-              <div>
-                <button
-                  onClick={() => toggleCategory('Subflows')}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 transition-colors rounded-lg hover:bg-neutral-800/50"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <FolderTree className="w-3 h-3" />
-                    Subflows
-                  </span>
-                  {expandedCategories['Subflows'] ? (
-                    <ChevronUp className="w-3 h-3" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" />
-                  )}
-                </button>
+        {/* Subflows section */}
+        {savedSubflows.length > 0 && (
+          <div>
+            <button
+              onClick={() => toggleCategory('Subflows')}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-400 hover:text-neutral-200 transition-colors rounded-lg hover:bg-neutral-800/50"
+            >
+              <span className="flex items-center gap-1.5">
+                <FolderTree className="w-3 h-3" />
+                Subflows
+              </span>
+              {expandedCategories.includes('Subflows') ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
+            </button>
 
-                {expandedCategories['Subflows'] && (
-                  <div className="mt-1 space-y-2 ml-2">
-                    {Object.entries(subflowsByCategory).map(([cat, subflows]) => (
-                      <div key={cat}>
-                        <div className="text-[10px] text-neutral-500 px-2 py-1">{cat}</div>
-                        {subflows.map((subflow) => (
-                          <div
-                            key={subflow.id}
-                            className="group relative"
-                          >
-                            <button
-                              onClick={() => handleAddSubflow(subflow)}
-                              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-indigo-500/20 bg-indigo-500/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                              title={`${subflow.config.inputs.length} inputs, ${subflow.config.outputs.length} outputs`}
-                            >
-                              <Workflow className="w-4 h-4 text-indigo-400" />
-                              <div className="flex-1 text-left">
-                                <span className="text-sm font-medium text-white">{subflow.name}</span>
-                              </div>
-                            </button>
-                            {/* Delete button */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm(`Delete "${subflow.name}"?`)) {
-                                  deleteSubflow(subflow.id);
-                                }
-                              }}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                              title="Delete subflow"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+            {expandedCategories.includes('Subflows') && (
+              <div className="mt-1 space-y-2 ml-2">
+                {Object.entries(subflowsByCategory).map(([cat, subflows]) => (
+                  <div key={cat}>
+                    <div className="text-[10px] text-neutral-500 px-2 py-1">{cat}</div>
+                    {subflows.map((subflow) => (
+                      <div
+                        key={subflow.id}
+                        draggable
+                        onDragStart={(event) => onDragStart(event, 'subflow', undefined, subflow)}
+                        className="group relative flex items-center gap-3 p-2.5 rounded-lg border border-transparent hover:border-neutral-700 hover:bg-neutral-800/50 cursor-grab active:cursor-grabbing transition-all bg-indigo-500/5"
+                      >
+                        <div className="p-2 rounded-md bg-indigo-500/10 border border-indigo-500/20">
+                          <Workflow className="w-4 h-4 text-indigo-400" />
+                        </div>
+                        <div 
+                          className="flex-1 min-w-0 cursor-pointer"
+                          onClick={() => handleAddSubflow(subflow)}
+                        >
+                          <div className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors truncate">
+                            {subflow.name}
                           </div>
-                        ))}
+                          <div className="text-[10px] text-neutral-500 truncate">
+                            {new Date(subflow.updatedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSubflow(subflow.id);
+                          }}
+                          className="p-1.5 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-all"
+                          title="Delete Subflow"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <GripVertical className="w-4 h-4 text-neutral-700 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     ))}
                   </div>
-                )}
+                ))}
               </div>
             )}
           </div>
-          
-          {/* Footer */}
-          <div className="px-4 py-3 border-t border-neutral-800/50 bg-neutral-900/50">
-            {savedSubflows.length === 0 ? (
-              <p className="text-[10px] text-neutral-500">
-                Save a flow with inputs & outputs to create reusable nodes
-              </p>
-            ) : (
-              <p className="text-[10px] text-neutral-500">
-                {savedSubflows.length} custom node{savedSubflows.length !== 1 ? 's' : ''} available
-              </p>
-            )}
-          </div>
-        </div>
+        )}
       </div>
       
-      {/* Save As Node Dialog */}
-      <SaveAsNodeDialog
-        isOpen={showSaveDialog}
-        onClose={() => setShowSaveDialog(false)}
-        onSave={handleSaveAsSubflow}
-        validationError={validationError}
-      />
-    </>
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-neutral-800/50 bg-neutral-900/50">
+        {savedSubflows.length === 0 ? (
+          <p className="text-[10px] text-neutral-500">
+            Save a flow with inputs & outputs to create reusable nodes
+          </p>
+        ) : (
+          <p className="text-[10px] text-neutral-500">
+            {savedSubflows.length} custom node{savedSubflows.length !== 1 ? 's' : ''} available
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

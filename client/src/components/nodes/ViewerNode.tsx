@@ -5,6 +5,7 @@ import {
   Image, Table, FileJson, List, Binary, AlertCircle
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
+import { useShallow } from 'zustand/react/shallow';
 import { 
   isSchematicData, 
   isImageData, 
@@ -327,16 +328,37 @@ function ObjectPreview({ value }: { value: object }) {
   );
 }
 
-function TablePreview({ value }: { value: TabularData }) {
+function TablePreview({ value }: { value: TabularData | DataValue }) {
   // Parse CSV if needed
   let rows: string[][] = [];
   let headers: string[] = [];
   
+  let content = '';
   if (typeof value.data === 'string') {
-    const lines = value.data.split('\n').filter(l => l.trim());
+    content = value.data;
+  } else if (value.data instanceof Uint8Array) {
+    content = new TextDecoder().decode(value.data);
+  }
+
+  if (content) {
+    const lines = content.split('\n').filter(l => l.trim());
     if (lines.length > 0) {
-      headers = lines[0].split(',').map(h => h.trim());
-      rows = lines.slice(1).map(line => line.split(',').map(c => c.trim()));
+      // Detect delimiter
+      const firstLine = lines[0];
+      const delimiters = [',', ';', '\t', '|'];
+      let bestDelimiter = ',';
+      let maxCount = 0;
+
+      for (const d of delimiters) {
+        const count = firstLine.split(d).length;
+        if (count > maxCount) {
+          maxCount = count;
+          bestDelimiter = d;
+        }
+      }
+
+      headers = firstLine.split(bestDelimiter).map(h => h.trim());
+      rows = lines.slice(1).map(line => line.split(bestDelimiter).map(c => c.trim()));
     }
   }
   
@@ -442,9 +464,17 @@ function BinaryPreview({ value }: { value: DataValue }) {
 const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { data: ViewerNodeData }) => {
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNodeData = useFlowStore((state) => state.updateNodeData);
-  const nodeCache = useFlowStore((state) => state.nodeCache);
-  const edges = useFlowStore((state) => state.edges);
   const setNodeOutput = useFlowStore((state) => state.setNodeOutput);
+  
+  // Optimized selector to only re-render when relevant data changes
+  const { viewerCache, sourceCache, inputEdge } = useFlowStore(useShallow((state) => {
+    const inputEdge = state.edges.find(e => e.target === id);
+    const viewerCache = state.nodeCache[id];
+    const sourceCache = inputEdge ? state.nodeCache[inputEdge.source] : null;
+    
+    return { viewerCache, sourceCache, inputEdge };
+  }));
+
   const [isHovered, setIsHovered] = useState(false);
   
   // Cache for persistence during re-execution
@@ -452,17 +482,12 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   
   const isResized = !!(width && height);
   
-  // Get input data - prefer viewer's own cache (which has serialized data), fall back to source
-  const inputEdge = edges.find(e => e.target === id);
-  const viewerCache = nodeCache[id];
-  const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
-  
   // Use viewer's own output if it has been executed (contains serialized data)
   // Otherwise fall back to source cache (for passthrough display before execution)
   const rawOutput = viewerCache?.status === 'completed' && viewerCache?.output 
     ? viewerCache.output 
     : sourceCache?.output;
-  const hasInput = inputEdge && (viewerCache?.status === 'completed' || sourceCache?.status === 'completed');
+  const hasInput = !!inputEdge && (viewerCache?.status === 'completed' || sourceCache?.status === 'completed');
   const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending' || viewerCache?.status === 'running';
   
   // Unwrap and process the value
@@ -486,7 +511,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   useEffect(() => {
     if (passthrough && hasInput && inputValue !== undefined) {
       // Store the output in the viewer's cache so downstream nodes can access it
-      setNodeOutput(id, inputValue);
+      setNodeOutput(id, { output: inputValue });
     }
   }, [passthrough, hasInput, inputValue, id, setNodeOutput]);
 
@@ -572,7 +597,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
       />
       <div
         className={`
-          relative rounded-xl overflow-hidden
+          relative rounded-xl overflow-visible
           bg-neutral-900 flex flex-col
           border transition-all duration-200
           ${isResized ? 'w-full h-full' : 'min-w-[180px] max-w-[280px]'}
@@ -590,7 +615,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
         onClick={() => selectNode(id)}
       >
         {/* Header */}
-        <div className="px-3 py-2.5 bg-gradient-to-r from-pink-900/30 to-neutral-900/50 border-b border-neutral-800/50">
+        <div className="px-3 py-2.5 bg-gradient-to-r from-pink-900/30 to-neutral-900/50 border-b border-neutral-800/50 rounded-t-xl">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${
@@ -639,6 +664,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
           type="target"
           position={Position.Left}
           id="input"
+          style={{ left: '-11px', top: '50%', transform: 'translateY(-50%)' }}
           className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
             hasInput ? '!bg-green-500' : '!bg-blue-500'
           }`}
@@ -651,6 +677,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
             type="source"
             position={Position.Right}
             id="output"
+            style={{ right: '-11px', top: '50%', transform: 'translateY(-50%)' }}
             className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
               hasInput ? '!bg-green-500' : '!bg-amber-500'
             }`}

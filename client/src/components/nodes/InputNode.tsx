@@ -46,11 +46,14 @@ const widgetOptionsForType: Record<DataType, { value: InputWidgetType; label: st
 };
 
 const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputNodeData }) => {
-  const { selectNode, updateNodeData, nodeCache, setNodeOutput } = useFlowStore();
+  const selectNode = useFlowStore((state) => state.selectNode);
+  const updateNodeData = useFlowStore((state) => state.updateNodeData);
+  const setNodeOutput = useFlowStore((state) => state.setNodeOutput);
+  const cache = useFlowStore((state) => state.nodeCache[id]);
+
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  const cache = nodeCache[id];
   const isReady = cache?.status === 'completed';
   
   // Determine data type from node type or data (support legacy and new format)
@@ -208,7 +211,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
   return (
     <div
       className={`
-        relative min-w-[180px] max-w-[240px] rounded-xl overflow-hidden
+        relative min-w-[180px] max-w-[240px] rounded-xl overflow-visible
         bg-neutral-900/80 backdrop-blur-sm
         border transition-all duration-200
         ${selected 
@@ -224,11 +227,11 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
     >
       {/* Ready indicator glow */}
       {isReady && (
-        <div className="absolute inset-0 bg-green-500/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-green-500/5 pointer-events-none rounded-xl" />
       )}
 
       {/* Header */}
-      <div className={`px-3 py-2.5 bg-gradient-to-r ${colors.gradient} border-b border-neutral-800/50`}>
+      <div className={`px-3 py-2.5 bg-gradient-to-r ${colors.gradient} border-b border-neutral-800/50 rounded-t-xl`}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${colors.bg}`}>
@@ -329,6 +332,7 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
         type="source"
         position={Position.Right}
         id="output"
+        style={{ right: '-11px', top: '50%', transform: 'translateY(-50%)' }}
         className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
           isReady ? '!bg-green-500' : '!bg-purple-500'
         }`}

@@ -9,6 +9,7 @@ import {
   Controls,
   MiniMap,
   Panel,
+  SelectionMode,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -993,6 +994,42 @@ export function Editor() {
   const completedCount = Object.values(nodeCache).filter(c => c.status === 'completed').length;
   const totalNodes = nodes.length;
 
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const type = event.dataTransfer.getData('application/reactflow');
+      const dataString = event.dataTransfer.getData('application/reactflow-data');
+      
+      // check if the dropped element is valid
+      if (typeof type === 'undefined' || !type) {
+        return;
+      }
+
+      const position = reactFlowInstance.current?.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      
+      if (!position) return;
+
+      const newNode: FlowNode = {
+        id: `${type}-${crypto.randomUUID().slice(0, 8)}`,
+        type,
+        position,
+        data: dataString ? JSON.parse(dataString) : { label: `${type} node` },
+      };
+
+      addNode(newNode);
+    },
+    [addNode]
+  );
+  
   return (
     <div 
       className="h-screen w-screen bg-neutral-950 flex flex-col no-select"
@@ -1307,13 +1344,18 @@ export function Editor() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onInit={onInit}
+          onInit={(instance) => {
+            reactFlowInstance.current = instance;
+            onInit(instance);
+          }}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeClick={(_event, node) => selectNode(node.id)}
           onPaneClick={() => {
             selectNode(null);
             if (isMobile) setShowMobileToolbar(false);
           }}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
@@ -1324,6 +1366,9 @@ export function Editor() {
             animated: false,
           }}
           proOptions={{ hideAttribution: true }}
+          // Selection and Dragging
+          selectionOnDrag={true}
+          selectionMode={SelectionMode.Partial}
           // Mobile touch improvements
           panOnDrag={true}
           zoomOnPinch={true}
