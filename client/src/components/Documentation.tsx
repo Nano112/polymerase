@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Book, Code, Box, Zap, Layers, Search, Menu, X } from 'lucide-react';
+import { ArrowLeft, Code, Box, Zap, Layers, Search, Menu, X } from 'lucide-react';
 
 export function Documentation() {
   const navigate = useNavigate();
