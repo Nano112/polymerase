@@ -17,6 +17,7 @@ import {
   type DataValue,
   type DataFormat,
   type DataMetadata,
+  type SchematicData,
 } from '../types/index.js';
 
 export interface WorkerClientOptions extends WorkerConfig {
@@ -26,6 +27,17 @@ export interface WorkerClientOptions extends WorkerConfig {
   worker?: Worker;
   /** Whether to use module workers */
   useModule?: boolean;
+}
+
+/**
+ * Result from executing a subflow in the worker
+ */
+export interface SubflowResult {
+  success: boolean;
+  outputs: Record<string, unknown>;
+  schematics?: Record<string, SchematicData> | null;
+  executionTime?: number;
+  error?: { message: string; nodeId?: string };
 }
 
 type EventCallback<T = unknown> = (data: T) => void;
@@ -224,6 +236,47 @@ export class WorkerClient {
           timeout: options.timeout || 60000,
         },
       }) as ExecutionResult;
+
+      this.state = WORKER_STATES.READY;
+      this.emit('executionSuccess', result);
+
+      return result;
+    } catch (error) {
+      this.state = WORKER_STATES.READY;
+      this.emit('executionError', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute a subflow (multiple nodes) within the worker.
+   * This keeps WASM objects in memory between nodes and only serializes
+   * at the final output boundary, avoiding redundant serialization overhead.
+   */
+  async executeSubflow(
+    nodes: Array<{ id: string; type: string; data: { code?: string; value?: unknown; label?: string } }>,
+    edges: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>,
+    inputs: Record<string, unknown>,
+    outputNodeIds: string[],
+    options: { timeout?: number } = {}
+  ): Promise<SubflowResult> {
+    if (this.state !== WORKER_STATES.READY) {
+      throw new Error(`Worker not ready. Current state: ${this.state}`);
+    }
+
+    try {
+      this.state = WORKER_STATES.EXECUTING;
+      this.emit('executionStart', undefined);
+
+      const result = await this.sendMessage(MESSAGE_TYPES.EXECUTE_FLOW, {
+        nodes,
+        edges,
+        inputs,
+        outputNodeIds,
+        options: {
+          timeout: options.timeout || 60000,
+        },
+      }) as SubflowResult;
 
       this.state = WORKER_STATES.READY;
       this.emit('executionSuccess', result);

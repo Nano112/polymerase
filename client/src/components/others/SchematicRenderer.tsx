@@ -160,11 +160,33 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
 
         let dataToLoad: ArrayBuffer;
 
+        // Handle cross-realm issues - instanceof can fail for data from workers
+        // Check for Uint8Array-like objects that have buffer property
         if (schematic instanceof Uint8Array) {
             dataToLoad = schematic.slice().buffer;
         } else if (schematic instanceof ArrayBuffer) {
             dataToLoad = schematic;
+        } else if (ArrayBuffer.isView(schematic)) {
+            // Handle TypedArrays from different realms
+            const view = schematic as Uint8Array;
+            const buf = view.buffer as ArrayBuffer;
+            dataToLoad = buf.slice(view.byteOffset, view.byteOffset + view.byteLength);
+        } else if (schematic && typeof schematic === 'object' && 'byteLength' in schematic) {
+            // Cross-realm typed array - convert to Uint8Array
+            // This handles cases where instanceof fails due to realm differences
+            const arr = schematic as unknown as { buffer?: ArrayBuffer; byteLength: number; byteOffset?: number; [index: number]: number };
+            if (arr.buffer) {
+                dataToLoad = arr.buffer.slice(arr.byteOffset || 0, (arr.byteOffset || 0) + arr.byteLength);
+            } else {
+                // Manually copy the data
+                const temp = new Uint8Array(arr.byteLength);
+                for (let i = 0; i < arr.byteLength; i++) {
+                    temp[i] = arr[i];
+                }
+                dataToLoad = temp.buffer;
+            }
         } else {
+            console.error('Invalid schematic format:', typeof schematic, schematic);
             setError('Invalid schematic format');
             setIsLoading(false);
             return;

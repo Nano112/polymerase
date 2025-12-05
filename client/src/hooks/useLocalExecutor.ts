@@ -1,8 +1,22 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { WorkerClient } from '@polymerase/core/worker';
+import { WorkerClient, type SubflowResult } from '@polymerase/core/worker';
 // @ts-ignore - Import worker directly from source
 import Worker from '../../../packages/core/src/worker/browser.worker.ts?worker';
 import { useFlowStore } from '../store/flowStore';
+
+interface SubflowNode {
+  id: string;
+  type: string;
+  data: { code?: string; value?: unknown; label?: string };
+}
+
+interface SubflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}
 
 export function useLocalExecutor() {
   const workerClientRef = useRef<WorkerClient | null>(null);
@@ -56,5 +70,21 @@ export function useLocalExecutor() {
     return workerClientRef.current.executeScript(code, inputs, { timeout: 60000 });
   }, []);
 
-  return { executeScript, workerClient: workerClientRef.current };
+  /**
+   * Execute a subflow entirely within the worker.
+   * This keeps WASM objects in memory between nodes, avoiding serialization overhead.
+   */
+  const executeSubflow = useCallback(async (
+    nodes: SubflowNode[],
+    edges: SubflowEdge[],
+    inputs: Record<string, unknown>,
+    outputNodeIds: string[]
+  ): Promise<SubflowResult> => {
+    if (!workerClientRef.current) {
+      throw new Error('Worker client not initialized');
+    }
+    return workerClientRef.current.executeSubflow(nodes, edges, inputs, outputNodeIds, { timeout: 60000 });
+  }, []);
+
+  return { executeScript, executeSubflow, workerClient: workerClientRef.current };
 }

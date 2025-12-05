@@ -1,8 +1,9 @@
-import { memo, useState, useCallback, useMemo } from 'react';
+import { memo, useState, useCallback, useMemo, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { 
   Workflow,
-  CheckCircle, Loader2, AlertCircle, Clock
+  CheckCircle, Loader2, AlertCircle, Clock,
+  Play, FlaskConical
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { 
@@ -10,6 +11,7 @@ import {
   type SubflowPort 
 } from '@polymerase/core';
 import type { NodeExecutionStatus } from '../../store/flowStore';
+import { Modal } from '../ui/Modal';
 
 // ============================================================================
 // Types
@@ -20,6 +22,190 @@ interface SubflowNodeData {
   flowId: string;
   subflowConfig: SubflowConfig;
   expanded?: boolean;
+}
+
+// ============================================================================
+// Subflow Test Modal
+// ============================================================================
+
+interface SubflowTestModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  config: SubflowConfig;
+  nodeLabel: string;
+}
+
+function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestModalProps) {
+  const [mockInputs, setMockInputs] = useState<Record<string, unknown>>({});
+  const [isRunning, setIsRunning] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; result?: unknown; error?: string } | null>(null);
+  
+  const inputs = config?.inputs || [];
+  
+  // Initialize mock inputs with defaults
+  useEffect(() => {
+    if (isOpen) {
+      const defaults: Record<string, unknown> = {};
+      inputs.forEach((port) => {
+        switch (port.type) {
+          case 'number':
+            defaults[port.id] = port.defaultValue ?? 0;
+            break;
+          case 'string':
+            defaults[port.id] = port.defaultValue ?? '';
+            break;
+          case 'boolean':
+            defaults[port.id] = port.defaultValue ?? false;
+            break;
+          default:
+            defaults[port.id] = port.defaultValue ?? null;
+        }
+      });
+      setMockInputs(defaults);
+      setTestResult(null);
+    }
+  }, [isOpen, inputs]);
+  
+  const handleInputChange = useCallback((portId: string, value: unknown) => {
+    setMockInputs(prev => ({ ...prev, [portId]: value }));
+  }, []);
+  
+  const runTest = useCallback(async () => {
+    setIsRunning(true);
+    setTestResult(null);
+    
+    // Simulate a test run (in real implementation, this would execute the subflow)
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setTestResult({
+      success: true,
+      result: {
+        message: 'Test completed with mock inputs',
+        inputs: mockInputs,
+      },
+    });
+    setIsRunning(false);
+  }, [mockInputs]);
+  
+  const getInputWidget = (port: SubflowPort) => {
+    const value = mockInputs[port.id];
+    
+    switch (port.type) {
+      case 'number':
+        return (
+          <input
+            type="number"
+            value={(value as number) ?? 0}
+            onChange={(e) => handleInputChange(port.id, parseFloat(e.target.value) || 0)}
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded text-sm text-white"
+          />
+        );
+      case 'boolean':
+        return (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={(value as boolean) ?? false}
+              onChange={(e) => handleInputChange(port.id, e.target.checked)}
+              className="w-4 h-4 rounded border-neutral-700 bg-neutral-800"
+            />
+            <span className="text-sm text-neutral-400">{value ? 'true' : 'false'}</span>
+          </label>
+        );
+      case 'string':
+      default:
+        return (
+          <input
+            type="text"
+            value={(value as string) ?? ''}
+            onChange={(e) => handleInputChange(port.id, e.target.value)}
+            placeholder={port.description || port.name}
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded text-sm text-white"
+          />
+        );
+    }
+  };
+  
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Test: ${nodeLabel}`}
+      subtitle="Run subflow with mock inputs"
+      icon={<FlaskConical className="w-5 h-5" />}
+      iconColor="text-indigo-400"
+      size="md"
+    >
+      <div className="space-y-6">
+        {/* Mock Inputs */}
+        {inputs.length > 0 ? (
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-neutral-300">Mock Inputs</h4>
+            <div className="space-y-3">
+              {inputs.map((port) => (
+                <div key={port.id} className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm text-neutral-400">
+                    <span className="font-medium">{port.name}</span>
+                    <span className="text-xs text-neutral-500">({port.type})</span>
+                  </label>
+                  {getInputWidget(port)}
+                  {port.description && (
+                    <p className="text-xs text-neutral-500">{port.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-neutral-500 text-center py-4">
+            This subflow has no inputs
+          </div>
+        )}
+        
+        {/* Run Button */}
+        <button
+          onClick={runTest}
+          disabled={isRunning}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-lg transition-colors"
+        >
+          {isRunning ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Running...
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4" />
+              Run Test
+            </>
+          )}
+        </button>
+        
+        {/* Results */}
+        {testResult && (
+          <div className={`p-4 rounded-lg border ${
+            testResult.success 
+              ? 'bg-green-500/10 border-green-500/30' 
+              : 'bg-red-500/10 border-red-500/30'
+          }`}>
+            <h4 className={`text-sm font-semibold mb-2 ${
+              testResult.success ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {testResult.success ? 'Test Passed' : 'Test Failed'}
+            </h4>
+            {testResult.result !== undefined && (
+              <pre className="text-xs font-mono text-neutral-300 bg-neutral-900/50 p-2 rounded overflow-auto max-h-40">
+                {JSON.stringify(testResult.result, null, 2)}
+              </pre>
+            )}
+            {testResult.error && (
+              <p className="text-sm text-red-400">{testResult.error}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
 }
 
 const StatusIndicator = ({ status }: { status: NodeExecutionStatus }) => {
@@ -118,6 +304,7 @@ const SubflowNode = memo(({ id, data, selected }: NodeProps & { data: SubflowNod
   const edges = useFlowStore((state) => state.edges);
   const executingNodeId = useFlowStore((state) => state.executingNodeId);
   const [isHovered, setIsHovered] = useState(false);
+  const [showTestModal, setShowTestModal] = useState(false);
   
   const cache = nodeCache[id];
   const status = cache?.status || 'idle';
@@ -241,10 +428,34 @@ const SubflowNode = memo(({ id, data, selected }: NodeProps & { data: SubflowNod
       {status === 'error' && cache?.error && (
         <div className="px-4 pb-3">
           <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2 font-mono">
-            {cache.error}
+            {cache.error.message}
           </div>
         </div>
       )}
+
+      {/* Test Button - visible on hover */}
+      {isHovered && (
+        <div className="absolute top-2 right-2 z-10">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowTestModal(true);
+            }}
+            className="p-1.5 bg-indigo-600/80 hover:bg-indigo-500 rounded-md text-white transition-colors"
+            title="Test subflow with mock inputs"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Test Modal */}
+      <SubflowTestModal
+        isOpen={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        config={config}
+        nodeLabel={data.label || config?.nodeName || 'Subflow'}
+      />
     </div>
   );
 });

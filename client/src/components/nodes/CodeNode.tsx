@@ -272,6 +272,33 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
         )}
       </div>
 
+      {/* Error Display - shows when node has an error */}
+      {status === 'error' && cache?.error && (
+        <div className="px-4 pb-3 pt-1">
+          <div 
+            className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2 font-mono cursor-pointer hover:bg-red-500/15 transition-colors"
+            title={`${cache.error.message}${cache.error.lineNumber ? ` (Line ${cache.error.lineNumber})` : ''}\n\nDouble-click node to see details`}
+          >
+            <div className="flex items-start gap-1.5">
+              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {cache.error.type && (
+                    <span className="font-semibold">{cache.error.type}:</span>
+                  )}
+                  {cache.error.lineNumber && (
+                    <span className="px-1.5 py-0.5 bg-red-500/20 rounded text-[9px]">
+                      Line {cache.error.lineNumber}
+                    </span>
+                  )}
+                </div>
+                <div className="truncate mt-0.5">{cache.error.message}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
 
       {/* Default input handle if no IO defined */}

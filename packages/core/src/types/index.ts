@@ -282,6 +282,23 @@ export interface SchematicData extends BaseDataValue {
 }
 
 /**
+ * Helper to check if a value looks like binary data (Uint8Array or similar).
+ * This handles cross-realm issues where instanceof Uint8Array fails for data
+ * that comes from a worker.
+ */
+function isBinaryData(data: unknown): boolean {
+  if (!data) return false;
+  if (data instanceof Uint8Array) return true;
+  if (ArrayBuffer.isView(data)) return true;
+  if (data instanceof ArrayBuffer) return true;
+  // Fallback check for cross-realm objects that look like typed arrays
+  if (typeof data === 'object' && 'byteLength' in data && typeof (data as { byteLength: unknown }).byteLength === 'number') {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Type guard to check if a value is a SchematicData object
  */
 export function isSchematicData(value: unknown): value is SchematicData {
@@ -291,7 +308,7 @@ export function isSchematicData(value: unknown): value is SchematicData {
   // Check for required SchematicData properties
   const validFormats: SchematicFormat[] = ['litematic', 'schematic', 'schem', 'nbt', 'mock'];
   const hasValidFormat = typeof obj.format === 'string' && validFormats.includes(obj.format as SchematicFormat);
-  const hasData = obj.data instanceof Uint8Array || typeof obj.data === 'string';
+  const hasData = isBinaryData(obj.data) || typeof obj.data === 'string';
   
   return hasValidFormat && hasData;
 }
@@ -319,7 +336,7 @@ export function isImageData(value: unknown): value is ImageData {
   
   const validFormats: ImageFormat[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
   const hasValidFormat = typeof obj.format === 'string' && validFormats.includes(obj.format as ImageFormat);
-  const hasData = obj.data instanceof Uint8Array || typeof obj.data === 'string';
+  const hasData = isBinaryData(obj.data) || typeof obj.data === 'string';
   
   return hasValidFormat && hasData;
 }
@@ -348,7 +365,7 @@ export function isTabularData(value: unknown): value is TabularData {
   
   const validFormats: TabularFormat[] = ['csv', 'json', 'xml', 'yaml'];
   const hasValidFormat = typeof obj.format === 'string' && validFormats.includes(obj.format as TabularFormat);
-  const hasData = obj.data instanceof Uint8Array || typeof obj.data === 'string';
+  const hasData = isBinaryData(obj.data) || typeof obj.data === 'string';
   
   return hasValidFormat && hasData;
 }

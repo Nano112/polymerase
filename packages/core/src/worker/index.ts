@@ -3,7 +3,7 @@
  * Provides both browser WebWorker and Bun Worker Thread support
  */
 
-export { WorkerClient, type WorkerClientOptions } from './WorkerClient.js';
+export { WorkerClient, type WorkerClientOptions, type SubflowResult } from './WorkerClient.js';
 export { BunWorkerClient, type BunWorkerClientOptions } from './BunWorkerClient.js';
 export { MessageHandler } from './MessageHandler.js';
 export { createContextProviders, createMinimalContextProviders } from './contextProviders.js';

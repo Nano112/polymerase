@@ -8,6 +8,7 @@ import { Play, Trash2, Loader2, CheckCircle, XCircle, AlertTriangle, Terminal, D
 import { useFlowStore, type FlowNode } from '../../store/flowStore';
 import type { IODefinition, IOPort } from '@polymerase/core';
 import { WorkerClient } from '@polymerase/core/worker';
+import { parseExecutionError } from '../../lib/utils';
 // @ts-ignore - Import worker directly from source
 import Worker from '../../../../packages/core/src/worker/browser.worker.ts?worker';
 
@@ -249,16 +250,20 @@ export function ExecutionPanel({ workerClient }: ExecutionPanelProps) {
         }
       } else {
         // Mark code node as error
-        setNodeExecutionStatus(primaryNode.id, 'error', undefined, executionResult.error);
+        const execError = executionResult.error 
+          ? parseExecutionError({ message: executionResult.error })
+          : parseExecutionError({ message: 'Unknown execution error' });
+        setNodeExecutionStatus(primaryNode.id, 'error', undefined, execError);
         addExecutionLog(`[ERROR] Execution failed: ${executionResult.error}`);
       }
     } catch (error) {
       const err = error as Error;
       addExecutionLog(`[ERROR] ${err.message}`);
       
-      // Mark all code nodes as error
+      // Mark all code nodes as error with structured error
+      const execError = parseExecutionError(err);
       for (const node of nodes.filter(n => n.type === 'code')) {
-        setNodeExecutionStatus(node.id, 'error', undefined, err.message);
+        setNodeExecutionStatus(node.id, 'error', undefined, execError);
       }
     } finally {
       setIsExecuting(false);

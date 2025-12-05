@@ -34,6 +34,7 @@ import {
   Copy,
   Grid3X3,
   HelpCircle,
+  Eye,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
@@ -47,6 +48,7 @@ import { Modal } from '../ui/Modal';
 import { ShortcutsModal } from '../ui/ShortcutsModal';
 import { CommandPalette } from '../ui/CommandPalette';
 import { useLocalExecutor } from '../../hooks/useLocalExecutor';
+import { parseExecutionError, createSimpleError } from '../../lib/utils';
 
 export function Editor() {
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
@@ -76,6 +78,8 @@ export function Editor() {
     redo,
     canUndo,
     canRedo,
+    debugMode,
+    toggleDebugMode,
   } = useFlowStore();
 
   // Modal states
@@ -279,7 +283,7 @@ export function Editor() {
     addExecutionLog('Cleared all node outputs');
   }, [clearAllCache, addExecutionLog]);
 
-  const { executeScript, workerClient } = useLocalExecutor();
+  const { executeScript, executeSubflow, workerClient } = useLocalExecutor();
 
   /**
    * Get nodes in topological order for execution
@@ -368,7 +372,7 @@ export function Editor() {
           
           if (!code) {
             addExecutionLog(`[WARN] Code node "${node.data.label || node.id}" has no script, skipping`);
-            setNodeExecutionStatus(node.id, 'error', undefined, 'No script');
+            setNodeExecutionStatus(node.id, 'error', undefined, createSimpleError('No script'));
             continue;
           }
 
@@ -450,8 +454,12 @@ export function Editor() {
             setNodeExecutionStatus(node.id, 'completed', finalResult, undefined, executionTime);
             addExecutionLog(`[OK] "${node.data.label || 'Code'}" completed in ${executionTime}ms`);
           } else {
-            setNodeExecutionStatus(node.id, 'error', undefined, result.error?.message);
-            addExecutionLog(`[ERROR] "${node.data.label || 'Code'}": ${result.error?.message}`);
+            // Parse the error with line numbers from the script
+            const executionError = result.error 
+              ? parseExecutionError(result.error, node.data.code)
+              : createSimpleError('Unknown execution error');
+            setNodeExecutionStatus(node.id, 'error', undefined, executionError);
+            addExecutionLog(`[ERROR] "${node.data.label || 'Code'}": ${executionError.message}`);
             // Stop execution on error
             break;
           }
@@ -521,7 +529,8 @@ export function Editor() {
           }
         }
 
-        // Handle subflow nodes - execute the embedded flow
+        // Handle subflow nodes - execute the embedded flow entirely within the worker
+        // This avoids serialization overhead by keeping WASM objects in memory
         if (node.type === 'subflow') {
           const subflowData = node.data as { 
             flowId: string; 
@@ -530,7 +539,7 @@ export function Editor() {
           };
           
           if (!subflowData.flowDefinition) {
-            setNodeExecutionStatus(node.id, 'error', undefined, 'Subflow definition not loaded');
+            setNodeExecutionStatus(node.id, 'error', undefined, createSimpleError('Subflow definition not loaded'));
             addExecutionLog(`[ERROR] Subflow "${node.data.label || node.id}": Definition not loaded`);
             continue;
           }
@@ -542,7 +551,7 @@ export function Editor() {
           
           const subflowStartTime = Date.now();
           try {
-            // Gather inputs for the subflow
+            // Gather inputs for the subflow from upstream nodes
             const subflowInputs: Record<string, unknown> = {};
             const incomingEdges = edges.filter(e => e.target === node.id);
             
@@ -551,7 +560,6 @@ export function Editor() {
               if (sourceOutput) {
                 const inputPortId = edge.targetHandle;
                 if (inputPortId) {
-                  // Get the value from source output
                   const outputKey = edge.sourceHandle || 'default';
                   let value = sourceOutput[outputKey];
                   if (value === undefined && Object.keys(sourceOutput).length === 1) {
@@ -562,90 +570,43 @@ export function Editor() {
               }
             }
             
-            // Execute the subflow's code nodes
-            // For now, we run them sequentially - could optimize with parallel execution
+            // Execute the entire subflow within the worker
+            // This keeps WASM objects in memory between nodes, only serializing at the end
             const subflowDef = subflowData.flowDefinition;
-            const subflowOrder = getExecutionOrder(subflowDef.nodes as FlowNode[], subflowDef.edges);
-            const subflowOutputs = new Map<string, Record<string, unknown>>();
+            const outputNodeIds = subflowData.subflowConfig.outputs.map(o => o.id);
             
-            // Set input values from external inputs
-            for (const subNode of subflowOrder) {
-              if (subNode.type?.includes('input') && !subNode.type?.includes('schematic')) {
-                // Check if this input has an external value
-                const externalValue = subflowInputs[subNode.id];
-                if (externalValue !== undefined) {
-                  subflowOutputs.set(subNode.id, { default: externalValue });
-                } else {
-                  // Use the node's default value
-                  subflowOutputs.set(subNode.id, { default: subNode.data.value });
-                }
-              }
+            const result = await executeSubflow(
+              subflowDef.nodes.map(n => ({
+                id: n.id,
+                type: n.type || 'unknown',
+                data: { code: n.data.code, value: n.data.value, label: n.data.label }
+              })),
+              subflowDef.edges.map(e => ({
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle
+              })),
+              subflowInputs,
+              outputNodeIds
+            );
+            
+            if (!result.success) {
+              throw new Error(result.error?.message || 'Subflow execution failed');
             }
             
-            // Execute code nodes in the subflow
-            for (const subNode of subflowOrder) {
-              if (subNode.type === 'code') {
-                const code = subNode.data.code;
-                if (!code) continue;
-                
-                // Gather inputs
-                const codeInputs: Record<string, unknown> = {};
-                const subIncomingEdges = subflowDef.edges.filter(e => e.target === subNode.id);
-                
-                for (const edge of subIncomingEdges) {
-                  const srcOutput = subflowOutputs.get(edge.source);
-                  if (srcOutput) {
-                    const inputName = edge.targetHandle || 'default';
-                    const outputKey = edge.sourceHandle || inputName;
-                    let val = srcOutput[outputKey];
-                    if (val === undefined && Object.keys(srcOutput).length === 1) {
-                      val = srcOutput[Object.keys(srcOutput)[0]];
-                    }
-                    codeInputs[inputName] = val;
-                  }
-                }
-                
-                // Execute
-                const result = await executeScript(code, codeInputs);
-                
-                if (result.success) {
-                  let finalResult: Record<string, unknown>;
-                  if (result.schematics && Object.keys(result.schematics).length > 0) {
-                    finalResult = {};
-                    for (const [key, value] of Object.entries(result.schematics)) {
-                      if (value) finalResult[key] = value;
-                    }
-                    if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
-                      finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
-                    }
-                  } else {
-                    finalResult = result.result || {};
-                  }
-                  subflowOutputs.set(subNode.id, finalResult);
-                } else {
-                  throw new Error(`Subflow code node error: ${result.error?.message}`);
-                }
-              }
-            }
+            // Process the result - prefer schematics if present
+            let subflowResult: Record<string, unknown> = {};
             
-            // Collect outputs from output nodes (viewers with passthrough or file_output)
-            const subflowResult: Record<string, unknown> = {};
-            
-            for (const outputPort of subflowData.subflowConfig.outputs) {
-              // Find the output node
-              const outputNode = subflowDef.nodes.find(n => n.id === outputPort.id);
-              if (outputNode) {
-                // Get the value coming into this output node
-                const outputIncomingEdge = subflowDef.edges.find(e => e.target === outputNode.id);
-                if (outputIncomingEdge) {
-                  const srcOutput = subflowOutputs.get(outputIncomingEdge.source);
-                  if (srcOutput) {
-                    const keys = Object.keys(srcOutput);
-                    const value = keys.length === 1 ? srcOutput[keys[0]] : srcOutput;
-                    subflowResult[outputPort.id] = value;
-                  }
-                }
+            if (result.schematics && Object.keys(result.schematics).length > 0) {
+              // Use serialized schematic data
+              for (const [key, value] of Object.entries(result.schematics)) {
+                if (value) subflowResult[key] = value;
               }
+            } else {
+              // Use regular outputs
+              subflowResult = result.outputs;
             }
             
             // Add default output if there's only one
@@ -654,13 +615,13 @@ export function Editor() {
             }
             
             nodeOutputs.set(node.id, subflowResult);
-            const subflowTime = Date.now() - subflowStartTime;
+            const subflowTime = result.executionTime || (Date.now() - subflowStartTime);
             setNodeExecutionStatus(node.id, 'completed', subflowResult, undefined, subflowTime);
             addExecutionLog(`[OK] Subflow "${node.data.label || 'Subflow'}" completed in ${subflowTime}ms`);
             
           } catch (err) {
             const error = err as Error;
-            setNodeExecutionStatus(node.id, 'error', undefined, error.message);
+            setNodeExecutionStatus(node.id, 'error', undefined, parseExecutionError(error));
             addExecutionLog(`[ERROR] Subflow "${node.data.label || 'Subflow'}": ${error.message}`);
             break;
           }
@@ -672,15 +633,16 @@ export function Editor() {
     } catch (error) {
       const err = error as Error;
       addExecutionLog(`[ERROR] ${err.message}`);
-      // Mark all code nodes as error
+      // Mark all code nodes as error with structured error info
+      const execError = parseExecutionError(err);
       for (const node of nodes.filter(n => n.type === 'code')) {
-        setNodeExecutionStatus(node.id, 'error', undefined, err.message);
+        setNodeExecutionStatus(node.id, 'error', undefined, execError);
       }
     } finally {
       setIsExecuting(false);
       setExecutingNodeId(null);
     }
-  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, getExecutionOrder]);
+  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, executeSubflow, getExecutionOrder]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstance.current = instance;
@@ -821,6 +783,17 @@ export function Editor() {
                   title={`Snap to Grid (${snapToGrid ? 'On' : 'Off'})`}
                 >
                   <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={toggleDebugMode}
+                  className={`p-2 rounded-lg transition-colors ${
+                    debugMode 
+                      ? 'text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30' 
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
+                  }`}
+                  title={`Debug Mode (${debugMode ? 'On' : 'Off'}) - Show data info on edges`}
+                >
+                  <Eye className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleClearCache}

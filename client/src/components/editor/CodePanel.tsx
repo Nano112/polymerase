@@ -6,8 +6,8 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import Editor, { type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import { Zap, Info, ArrowRight, CheckCircle, XCircle, Loader2, Plus, Save, AlertTriangle } from 'lucide-react';
-import { useFlowStore } from '../../store/flowStore';
+import { Zap, Info, ArrowRight, CheckCircle, XCircle, Loader2, Plus, Save, AlertTriangle, ChevronDown, ChevronRight, Copy, Code } from 'lucide-react';
+import { useFlowStore, type ExecutionError } from '../../store/flowStore';
 import type { IODefinition } from '@polymerase/core';
 
 // Use empty string for dev (Vite proxy handles /api), or VITE_SERVER_URL for production
@@ -22,6 +22,98 @@ interface ValidationState {
   status: 'idle' | 'validating' | 'valid' | 'invalid';
   io?: IODefinition;
   error?: string;
+}
+
+/**
+ * Enhanced execution error display component with line numbers, code snippets, and stack traces
+ */
+function ExecutionErrorDisplay({ error }: { error: ExecutionError }) {
+  const [showStack, setShowStack] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyError = useCallback(() => {
+    const errorText = [
+      `Error: ${error.message}`,
+      error.type ? `Type: ${error.type}` : '',
+      error.lineNumber ? `Line: ${error.lineNumber}${error.columnNumber ? `:${error.columnNumber}` : ''}` : '',
+      error.codeSnippet ? `\nCode:\n${error.codeSnippet}` : '',
+      error.stack ? `\nStack trace:\n${error.stack}` : '',
+    ].filter(Boolean).join('\n');
+
+    navigator.clipboard.writeText(errorText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [error]);
+
+  return (
+    <div className="border-b border-orange-500/20 bg-orange-950/30">
+      {/* Error Header */}
+      <div className="px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-orange-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-orange-300">
+              {error.type || 'Execution Error'}
+            </span>
+            {error.lineNumber && (
+              <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full">
+                Line {error.lineNumber}{error.columnNumber ? `:${error.columnNumber}` : ''}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-orange-200/90 break-words">{error.message}</p>
+        </div>
+        <button
+          onClick={copyError}
+          className="p-1.5 rounded hover:bg-orange-500/20 text-orange-400 transition-colors shrink-0"
+          title="Copy error details"
+        >
+          {copied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Code Snippet */}
+      {error.codeSnippet && (
+        <div className="mx-4 mb-3 rounded-lg bg-neutral-900/60 border border-orange-500/20 overflow-hidden">
+          <div className="px-3 py-1.5 text-xs text-orange-300/70 bg-orange-500/10 border-b border-orange-500/20 flex items-center gap-2">
+            <Code className="w-3 h-3" />
+            Code context
+          </div>
+          <pre className="p-3 text-xs font-mono overflow-x-auto text-neutral-300">
+            {error.codeSnippet.split('\n').map((line, idx) => {
+              const isErrorLine = line.startsWith('> ');
+              return (
+                <div
+                  key={idx}
+                  className={isErrorLine ? 'bg-orange-500/20 -mx-3 px-3 text-orange-200' : ''}
+                >
+                  {line}
+                </div>
+              );
+            })}
+          </pre>
+        </div>
+      )}
+
+      {/* Stack Trace Toggle */}
+      {error.stack && (
+        <div className="mx-4 mb-3">
+          <button
+            onClick={() => setShowStack(!showStack)}
+            className="flex items-center gap-1.5 text-xs text-orange-400/70 hover:text-orange-300 transition-colors"
+          >
+            {showStack ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Stack trace
+          </button>
+          {showStack && (
+            <pre className="mt-2 p-3 text-xs font-mono bg-neutral-900/60 border border-orange-500/20 rounded-lg overflow-x-auto text-neutral-400 max-h-40 overflow-y-auto">
+              {error.stack}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CodePanel({ nodeId }: CodePanelProps) {
@@ -126,8 +218,9 @@ export function CodePanel({ nodeId }: CodePanelProps) {
     saveCodeRef.current = saveCode;
   }, [saveCode]);
 
-  // Get execution error for this node
+  // Get execution error for this node (now structured as ExecutionError)
   const executionError = nodeCache[nodeId]?.error;
+  const executionErrorMessage = executionError?.message;
   const executionStatus = nodeCache[nodeId]?.status;
 
   const handleCodeChange = useCallback(
@@ -310,7 +403,7 @@ export function CodePanel({ nodeId }: CodePanelProps) {
           )}
 
           {executionStatus === 'error' && (
-            <span className="text-xs text-orange-400 px-2 py-1 bg-orange-500/10 rounded border border-orange-500/20 flex items-center gap-1" title={executionError}>
+            <span className="text-xs text-orange-400 px-2 py-1 bg-orange-500/10 rounded border border-orange-500/20 flex items-center gap-1" title={executionErrorMessage}>
               <AlertTriangle className="w-3 h-3" />
               Runtime Error
             </span>
@@ -323,7 +416,7 @@ export function CodePanel({ nodeId }: CodePanelProps) {
             </span>
           )}
 
-          {validation.status === 'valid' && !executionError && (
+          {validation.status === 'valid' && !executionErrorMessage && (
             <span className="text-xs text-green-400 px-2 py-1 bg-green-500/10 rounded border border-green-500/20 flex items-center gap-1">
               <CheckCircle className="w-3 h-3" />
               Valid
@@ -366,17 +459,9 @@ export function CodePanel({ nodeId }: CodePanelProps) {
         />
       </div>
 
-      {/* Execution Error display */}
+      {/* Enhanced Execution Error display */}
       {executionStatus === 'error' && executionError && (
-        <div className="px-6 py-3 bg-orange-900/20 border-b border-orange-500/20">
-          <div className="flex items-start gap-2 text-sm text-orange-400">
-            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <div className="font-medium mb-1">Execution Error</div>
-              <pre className="whitespace-pre-wrap font-mono text-xs text-orange-300/80">{executionError}</pre>
-            </div>
-          </div>
-        </div>
+        <ExecutionErrorDisplay error={executionError} />
       )}
 
       {/* Validation Error display */}

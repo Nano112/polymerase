@@ -7,6 +7,7 @@ import { MESSAGE_TYPES, type MessageType, type WorkerMessage, type SchematicData
 import { SynthaseService } from '../services/SynthaseService.js';
 import { createContextProviders } from './contextProviders.js';
 import { workerDataStore, type StoreDataOptions, type SerializeOptions } from './WorkerDataStore.js';
+import { processInputSchematics } from '../utils/schematic.js';
 import type { IODefinition } from '../types/index.js';
 
 export interface MessageHandlerOptions {
@@ -46,6 +47,11 @@ export class MessageHandler {
 
         case MESSAGE_TYPES.EXECUTE_SCRIPT:
           result = await this.handleExecuteScript(payload as ExecuteScriptPayload);
+          this.sendMessage(MESSAGE_TYPES.EXECUTION_SUCCESS, result, id);
+          break;
+
+        case MESSAGE_TYPES.EXECUTE_FLOW:
+          result = await this.handleExecuteSubflow(payload as ExecuteSubflowPayload);
           this.sendMessage(MESSAGE_TYPES.EXECUTION_SUCCESS, result, id);
           break;
 
@@ -201,6 +207,255 @@ export class MessageHandler {
       this.postProgress('Execution failed: ' + err.message);
       throw error;
     }
+  }
+
+  /**
+   * Handle subflow execution - executes multiple nodes within the worker
+   * without crossing worker boundaries between nodes. This keeps WASM objects
+   * in memory and only serializes at the final output.
+   */
+  private async handleExecuteSubflow(payload: ExecuteSubflowPayload): Promise<ExecuteSubflowResult> {
+    if (!this.isInitialized || !this.synthaseService) {
+      throw new Error('Service not initialized');
+    }
+
+    const { nodes, edges, inputs, outputNodeIds, options } = payload;
+    const startTime = performance.now();
+
+    // Cancel any previous execution
+    if (this.currentExecution) {
+      this.currentExecution.cancelled = true;
+    }
+    this.currentExecution = { cancelled: false };
+    const executionId = this.currentExecution;
+
+    this.postProgress('Starting subflow execution...');
+
+    try {
+      // Store outputs for each node (including WASM objects)
+      const nodeOutputs = new Map<string, Record<string, unknown>>();
+
+      // Process initial inputs (convert SchematicData to WASM if needed)
+      const processedInputs = await processInputSchematics(inputs);
+
+      // Topological sort to get execution order
+      const executionOrder = this.getSubflowExecutionOrder(nodes, edges);
+
+      // Initialize input nodes with their values
+      for (const node of nodes) {
+        if (node.type?.includes('input') && !node.type?.includes('schematic')) {
+          const externalValue = processedInputs[node.id];
+          if (externalValue !== undefined) {
+            nodeOutputs.set(node.id, { default: externalValue });
+          } else if (node.data.value !== undefined) {
+            nodeOutputs.set(node.id, { default: node.data.value });
+          }
+        }
+      }
+
+      // Execute code nodes in order
+      for (const node of executionOrder) {
+        if (executionId.cancelled) {
+          throw new Error('Execution cancelled');
+        }
+
+        if (node.type === 'code' && node.data.code) {
+          this.postProgress(`Executing node: ${node.data.label || node.id}`);
+
+          // Gather inputs from connected nodes
+          const codeInputs: Record<string, unknown> = {};
+          const incomingEdges = edges.filter(e => e.target === node.id);
+
+          for (const edge of incomingEdges) {
+            const srcOutput = nodeOutputs.get(edge.source);
+            if (srcOutput) {
+              const inputName = edge.targetHandle || 'default';
+              const outputKey = edge.sourceHandle || inputName;
+              let val = srcOutput[outputKey];
+              if (val === undefined && Object.keys(srcOutput).length === 1) {
+                val = srcOutput[Object.keys(srcOutput)[0]];
+              }
+              codeInputs[inputName] = val;
+            }
+          }
+
+          // Execute the script (within the same worker, no serialization)
+          const result = await this.synthaseService.executeScript(
+            node.data.code,
+            codeInputs,
+            { timeout: options?.timeout || 60000 }
+          );
+
+          if (!result.success) {
+            throw Object.assign(new Error(result.error?.message || 'Script execution failed'), {
+              nodeId: node.id
+            });
+          }
+
+          // Store outputs - keep WASM objects as-is (no serialization!)
+          const nodeResult: Record<string, unknown> = {};
+          
+          // If there are schematics in the result, include them directly
+          if (result.hasSchematic && result.schematics) {
+            for (const [key, value] of Object.entries(result.schematics)) {
+              if (value) nodeResult[key] = value;
+            }
+          }
+          
+          // Also include any other result values
+          if (result.result) {
+            for (const [key, value] of Object.entries(result.result)) {
+              if (!(key in nodeResult)) {
+                nodeResult[key] = value;
+              }
+            }
+          }
+
+          // Ensure there's a default output
+          if (Object.keys(nodeResult).length === 1 && !('default' in nodeResult)) {
+            nodeResult['default'] = nodeResult[Object.keys(nodeResult)[0]];
+          }
+
+          nodeOutputs.set(node.id, nodeResult);
+        }
+      }
+
+      // Collect final outputs from output nodes
+      const finalOutputs: Record<string, unknown> = {};
+      const finalSchematics: Record<string, unknown> = {};
+
+      for (const outputId of outputNodeIds) {
+        // Find edges leading to this output node
+        const outputEdge = edges.find(e => e.target === outputId);
+        if (outputEdge) {
+          const srcOutput = nodeOutputs.get(outputEdge.source);
+          if (srcOutput) {
+            // Try to get a single value - prefer 'default', then single key, then sourceHandle
+            let value: unknown;
+            const sourceKey = outputEdge.sourceHandle || 'default';
+            
+            if (sourceKey in srcOutput) {
+              value = srcOutput[sourceKey];
+            } else if ('default' in srcOutput) {
+              value = srcOutput['default'];
+            } else {
+              const keys = Object.keys(srcOutput);
+              value = keys.length === 1 ? srcOutput[keys[0]] : srcOutput;
+            }
+            
+            finalOutputs[outputId] = value;
+
+            // Check if it's a schematic (could be direct or nested)
+            if (this.isSchematicWrapper(value)) {
+              finalSchematics[outputId] = value;
+            } else if (value && typeof value === 'object') {
+              // Check for schematics in nested object
+              for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+                if (this.isSchematicWrapper(v)) {
+                  finalSchematics[`${outputId}_${k}`] = v;
+                  // Also use this as the main output if it's the only schematic
+                  if (!finalSchematics[outputId]) {
+                    finalSchematics[outputId] = v;
+                    finalOutputs[outputId] = v;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Add default output if there's only one
+      if (Object.keys(finalOutputs).length === 1 && !('default' in finalOutputs)) {
+        const key = Object.keys(finalOutputs)[0];
+        finalOutputs['default'] = finalOutputs[key];
+        if (finalSchematics[key]) {
+          finalSchematics['default'] = finalSchematics[key];
+        }
+      }
+
+      // Only serialize schematics at the final output boundary
+      let processedSchematics = null;
+      if (Object.keys(finalSchematics).length > 0) {
+        processedSchematics = await this.processSchematicsForTransfer(finalSchematics);
+      }
+
+      const executionTime = Math.round(performance.now() - startTime);
+      this.currentExecution = null;
+      this.postProgress(`Subflow completed in ${executionTime}ms`);
+
+      return {
+        success: true,
+        outputs: finalOutputs,
+        schematics: processedSchematics,
+        executionTime,
+      };
+    } catch (error) {
+      this.currentExecution = null;
+      const err = error as Error & { nodeId?: string };
+      this.postProgress('Subflow execution failed: ' + err.message);
+      return {
+        success: false,
+        outputs: {},
+        error: { message: err.message, nodeId: err.nodeId },
+      };
+    }
+  }
+
+  /**
+   * Check if value is a SchematicWrapper (nucleation WASM object)
+   */
+  private isSchematicWrapper(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const obj = value as Record<string, unknown>;
+    return typeof obj.to_schematic === 'function' || 
+           typeof obj.set_block === 'function' ||
+           '__wbg_ptr' in obj;
+  }
+
+  /**
+   * Topological sort for subflow execution order
+   */
+  private getSubflowExecutionOrder(nodes: SubflowNode[], edges: SubflowEdge[]): SubflowNode[] {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const inDegree = new Map<string, number>();
+    const adjacency = new Map<string, string[]>();
+
+    // Initialize
+    for (const node of nodes) {
+      inDegree.set(node.id, 0);
+      adjacency.set(node.id, []);
+    }
+
+    // Build graph
+    for (const edge of edges) {
+      const targets = adjacency.get(edge.source) || [];
+      targets.push(edge.target);
+      adjacency.set(edge.source, targets);
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    }
+
+    // Kahn's algorithm
+    const queue: string[] = [];
+    const result: SubflowNode[] = [];
+
+    for (const [id, degree] of inDegree) {
+      if (degree === 0) queue.push(id);
+    }
+
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      const node = nodeMap.get(id);
+      if (node) result.push(node);
+
+      for (const target of adjacency.get(id) || []) {
+        const newDegree = (inDegree.get(target) || 0) - 1;
+        inDegree.set(target, newDegree);
+        if (newDegree === 0) queue.push(target);
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -379,5 +634,42 @@ interface GetDataPayload {
 
 interface ReleaseDataPayload {
   handleId: string;
+}
+
+// Subflow execution types
+interface SubflowNode {
+  id: string;
+  type: string;
+  data: {
+    code?: string;
+    value?: unknown;
+    label?: string;
+  };
+}
+
+interface SubflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+interface ExecuteSubflowPayload {
+  nodes: SubflowNode[];
+  edges: SubflowEdge[];
+  inputs: Record<string, unknown>;
+  outputNodeIds: string[];
+  options?: {
+    timeout?: number;
+  };
+}
+
+interface ExecuteSubflowResult {
+  success: boolean;
+  outputs: Record<string, unknown>;
+  schematics?: Record<string, SchematicData> | null;
+  executionTime?: number;
+  error?: { message: string; nodeId?: string };
 }
 

@@ -31,10 +31,19 @@ export type InputWidgetType =
   | 'select'        // Dropdown
   | 'color';        // Color picker
 
+export interface ExecutionError {
+  message: string;
+  type?: string;
+  stack?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+  codeSnippet?: string;
+}
+
 export interface NodeExecutionCache {
   status: NodeExecutionStatus;
   output?: unknown;
-  error?: string;
+  error?: ExecutionError;
   lastExecutedAt?: number;
   executionTime?: number;  // Duration in milliseconds
   inputHash?: string;  // Hash of inputs to detect changes
@@ -123,6 +132,7 @@ interface FlowState {
   
   // UI state
   selectedNodeId: string | null;
+  debugMode: boolean;  // Show data flow debug info on edges
   
   // Actions
   setFlowId: (id: string | null) => void;
@@ -140,7 +150,7 @@ interface FlowState {
   selectNode: (nodeId: string | null) => void;
   
   // Execution cache
-  setNodeExecutionStatus: (nodeId: string, status: NodeExecutionStatus, output?: unknown, error?: string, executionTime?: number) => void;
+  setNodeExecutionStatus: (nodeId: string, status: NodeExecutionStatus, output?: unknown, error?: ExecutionError, executionTime?: number) => void;
   setNodeOutput: (nodeId: string, output: unknown) => void;
   invalidateNode: (nodeId: string) => void;
   invalidateDownstream: (nodeId: string) => void;
@@ -153,6 +163,10 @@ interface FlowState {
   setExecutingNodeId: (nodeId: string | null) => void;
   addExecutionLog: (log: string) => void;
   clearExecutionLogs: () => void;
+  
+  // Debug
+  setDebugMode: (enabled: boolean) => void;
+  toggleDebugMode: () => void;
   
   // Flow operations
   loadFlow: (flow: FlowData) => void;
@@ -251,12 +265,17 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   selectedNodeId: null,
   isExecuting: false,
   executionLogs: [],
+  debugMode: false,
 
   // Setters
   setFlowId: (id) => set({ flowId: id }),
   setFlowName: (name) => set({ flowName: name }),
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
+
+  // Debug mode
+  setDebugMode: (enabled) => set({ debugMode: enabled }),
+  toggleDebugMode: () => set((state) => ({ debugMode: !state.debugMode })),
 
   // React Flow handlers
   onNodesChange: (changes) => {
@@ -390,7 +409,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           ...get().nodeCache[nodeId],
           status,
           output: output !== undefined ? output : get().nodeCache[nodeId]?.output,
-          error,
+          error,  // Store full structured ExecutionError
           lastExecutedAt: status === 'completed' ? Date.now() : get().nodeCache[nodeId]?.lastExecutedAt,
           executionTime: executionTime !== undefined ? executionTime : get().nodeCache[nodeId]?.executionTime,
         },
