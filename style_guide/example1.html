@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow - Unified Design System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        neutral: {
+                            850: '#1f1f1f',
+                            900: '#171717',
+                            950: '#0a0a0a', 
+                        },
+                        brand: {
+                            green: '#4ade80',
+                            blue: '#60a5fa',
+                            purple: '#c084fc',
+                            orange: '#fb923c',
+                            pink: '#f472b6',
+                            cyan: '#22d3ee',
+                            amber: '#fbbf24',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background-color: #0a0a0a; 
+            color: #e5e5e5; 
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .app-bg {
+            background-image: linear-gradient(to right, #262626 1px, transparent 1px),
+                              linear-gradient(to bottom, #262626 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+        }
+
+        .grid-bg {
+            background-image: linear-gradient(to right, #222 1px, transparent 1px),
+                              linear-gradient(to bottom, #222 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        @keyframes data-flow {
+            0% { stroke-dashoffset: 100; opacity: 0; }
+            50% { opacity: 1; }
+            100% { stroke-dashoffset: 0; opacity: 0; }
+        }
+        .animate-data-path {
+            stroke-dasharray: 20;
+            animation: data-flow 2s linear infinite;
+        }
+
+        @keyframes pulse-node {
+            0%, 100% { fill-opacity: 1; filter: drop-shadow(0 0 5px rgba(34,197,94,0.5)); }
+            50% { fill-opacity: 0.5; filter: drop-shadow(0 0 0px rgba(34,197,94,0)); }
+        }
+        .animate-node-pulse {
+            animation: pulse-node 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+
+        @keyframes flow-pulse {
+            0% { stroke-dashoffset: 20; opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { stroke-dashoffset: 0; opacity: 0.5; }
+        }
+        .flow-anim {
+            stroke-dasharray: 10;
+            animation: flow-pulse 3s linear infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex">
+
+    <!-- Sidebar Navigation -->
+    <aside class="fixed top-0 left-0 h-screen w-64 border-r border-white/10 bg-[#0a0a0a] z-50 hidden lg:flex flex-col p-6">
+        <div class="flex items-center gap-3 mb-10">
+            <svg width="24" height="24" viewBox="0 0 100 100" fill="none">
+                <rect x="20" y="20" width="20" height="20" rx="4" fill="#262626"/>
+                <rect x="50" y="20" width="20" height="20" rx="4" fill="#262626"/>
+                <rect x="80" y="20" width="20" height="20" rx="4" fill="#4ade80"/>
+                <rect x="20" y="50" width="20" height="20" rx="4" fill="#262626"/>
+                <rect x="50" y="50" width="20" height="20" rx="4" fill="#262626"/>
+                <rect x="20" y="80" width="20" height="20" rx="4" fill="#262626"/>
+            </svg>
+            <span class="font-bold text-lg tracking-tight">Flow</span>
+        </div>
+        
+        <nav class="space-y-1 text-sm text-neutral-400">
+            <a href="#identity" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">1. Brand Identity</a>
+            <a href="#logo-assets" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">2. Logo Assets</a>
+            <a href="#hero" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">3. Hero Illustration</a>
+            <a href="#colors" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">4. Color System</a>
+            <a href="#typography" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">5. Typography</a>
+            <a href="#components" class="block px-3 py-2 rounded hover:bg-white/5 hover:text-white transition-colors">6. Components</a>
+        </nav>
+
+        <div class="mt-auto pt-6 border-t border-white/10">
+            <p class="text-xs text-neutral-500">Flow Design System v1.0</p>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="lg:pl-64 w-full relative">
+        <div class="absolute inset-0 app-bg pointer-events-none -z-10 h-[600px]"></div>
+
+        <div class="max-w-6xl mx-auto px-8 py-16 space-y-24">
+
+            <!-- Header -->
+            <div>
+                <h1 class="text-5xl font-bold mb-4">Flow Design System</h1>
+                <p class="text-xl text-neutral-400 max-w-2xl">
+                    The complete visual language of Flow. Merging strict voxel logic with fluid node connections, optimized for dark mode technical interfaces.
+                </p>
+            </div>
+            
+
+            <!-- SECTION 1: BRAND IDENTITY -->
+            <section id="identity" class="scroll-mt-24">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-green/10 flex items-center justify-center text-brand-green border border-brand-green/20">1</div>
+                    <h2 class="text-2xl font-bold">Brand Identity</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                    <!-- Primary Mark -->
+                    <div class="bg-[#0c0c0e] border border-white/10 rounded-2xl p-12 flex flex-col items-center justify-center relative overflow-hidden group">
+                        <div class="absolute inset-0 grid-bg opacity-20"></div>
+                        <div class="absolute top-4 left-4 text-xs font-mono text-neutral-500">PRIMARY MARK</div>
+                        
+                        <svg width="140" height="140" viewBox="0 0 100 100" fill="none" class="relative z-10 group-hover:scale-105 transition-transform duration-500">
+                            <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626" />
+                            <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626" />
+                            <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626" />
+                            <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626" />
+                            <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626" />
+                            <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80" fill-opacity="0.2" stroke="#4ade80" stroke-width="1.5"/>
+                            <path d="M40 32 H48 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#404040" stroke-width="2"/>
+                            <path d="M48 32 H72" stroke="#4ade80" stroke-width="2" class="flow-anim"/>
+                        </svg>
+
+                        <div class="mt-8 text-center relative z-10">
+                            <span class="text-3xl font-bold tracking-tight">Flow</span>
+                            <p class="text-sm text-neutral-500 mt-1">Logic + Structure</p>
+                        </div>
+                    </div>
+
+                    <!-- Design Rationale -->
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="font-bold text-white mb-2">Design Rationale</h3>
+                            <p class="text-neutral-400 text-sm leading-relaxed">
+                                Constructed from a 3×3 grid of "cards" representing Flow Editor nodes. The lines connect them to form an abstract "F". The top-right node is partially filled to indicate an "Active" or "Output" state.
+                            </p>
+                        </div>
+                        <div class="bg-neutral-900 rounded-lg p-4 border border-white/5">
+                            <code class="text-xs text-neutral-400 font-mono block mb-2">// Color Tokens</code>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-brand-green rounded-full"></span> #4ade80</span>
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-[#262626] border border-white/20 rounded-full"></span> #262626</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contextual Variants -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-mono text-neutral-500 uppercase tracking-widest">Contextual Variants</h3>
+                    
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-[#121212] border border-white/10 rounded-xl p-6 flex items-center justify-between">
+                            <div>
+                                <h4 class="font-medium text-white">Semantic Colors</h4>
+                                <p class="text-xs text-neutral-400 mt-1">Logo adapts based on context</p>
+                            </div>
+                            <div class="flex gap-4">
+                                <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                                    <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="72" y="24" width="16" height="16" rx="4" fill="#60a5fa" fill-opacity="0.3"/>
+                                    <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                                    <path d="M48 32 H72" stroke="#60a5fa" stroke-width="3"/>
+                                </svg>
+                                <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                                    <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                                    <rect x="72" y="24" width="16" height="16" rx="4" fill="#c084fc" fill-opacity="0.3"/>
+                                    <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                                    <path d="M48 32 H72" stroke="#c084fc" stroke-width="3"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="bg-white text-black border border-neutral-200 rounded-xl p-6 flex items-center justify-between">
+                            <div>
+                                <h4 class="font-medium">Light Mode / Print</h4>
+                                <p class="text-xs text-neutral-500 mt-1">Solid monochromatic form</p>
+                            </div>
+                            <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                                <rect x="24" y="24" width="16" height="16" rx="4" fill="#000"/>
+                                <rect x="24" y="48" width="16" height="16" rx="4" fill="#000"/>
+                                <rect x="24" y="72" width="16" height="16" rx="4" fill="#000"/>
+                                <rect x="48" y="24" width="16" height="16" rx="4" fill="#000"/>
+                                <rect x="72" y="24" width="16" height="16" rx="4" fill="#000"/>
+                                <rect x="48" y="48" width="16" height="16" rx="4" fill="#000"/>
+                                <path d="M40 32 H72 M40 56 H48 M32 40 V72" stroke="#000" stroke-width="4"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 2: LOGO ASSETS -->
+            <section id="logo-assets" class="scroll-mt-24">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-blue/10 flex items-center justify-center text-brand-blue border border-brand-blue/20">2</div>
+                    <h2 class="text-2xl font-bold">Logo Assets & States</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- Processing State -->
+                    <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-6 flex flex-col items-center">
+                        <div class="h-32 w-32 mb-4 flex items-center justify-center">
+                            <svg viewBox="0 0 100 100" fill="none" class="w-full h-full text-brand-green">
+                                <g opacity="0.3">
+                                    <rect x="24" y="24" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <rect x="24" y="48" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <rect x="24" y="72" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <rect x="48" y="24" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <rect x="72" y="24" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <rect x="48" y="48" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="currentColor" stroke-width="2"/>
+                                </g>
+                                <path d="M75 32 H32 V80" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="animate-data-path" fill="none"/>
+                                <path d="M55 56 H32" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="animate-data-path" style="animation-delay: 0.5s" fill="none"/>
+                            </svg>
+                        </div>
+                        <span class="text-sm font-mono text-neutral-400">Loading / Processing</span>
+                    </div>
+
+                    <!-- Wordmark -->
+                    <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center col-span-2">
+                        <div class="flex items-center gap-4">
+                            <svg width="48" height="48" viewBox="0 0 100 100" fill="none" class="text-brand-green">
+                                <rect x="24" y="24" width="16" height="16" rx="4" fill="#18181b" stroke="currentColor" stroke-width="4"/>
+                                <rect x="24" y="48" width="16" height="16" rx="4" fill="#18181b" stroke="currentColor" stroke-width="4"/>
+                                <rect x="24" y="72" width="16" height="16" rx="4" fill="#18181b" stroke="currentColor" stroke-width="4"/>
+                                <rect x="48" y="24" width="16" height="16" rx="4" fill="#18181b" stroke="currentColor" stroke-width="4"/>
+                                <rect x="72" y="24" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="4"/>
+                                <rect x="48" y="48" width="16" height="16" rx="4" fill="#18181b" stroke="currentColor" stroke-width="4"/>
+                                <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="currentColor" stroke-width="4"/>
+                            </svg>
+                            <span class="text-4xl font-bold tracking-tighter text-white">Flow</span>
+                        </div>
+                        <span class="text-sm font-mono text-neutral-400 mt-8">Main Header Usage</span>
+                    </div>
+                </div>
+
+                <!-- Favicons -->
+                <div>
+                    <h3 class="text-sm font-mono text-neutral-500 uppercase tracking-widest mb-4">Favicons & App Icons</h3>
+                    <div class="flex gap-8">
+                        <div>
+                            <div class="w-16 h-16 bg-[#0c0c0e] rounded-xl flex items-center justify-center border border-white/10 mb-2">
+                                <svg width="40" height="40" viewBox="0 0 100 100" fill="none" class="text-brand-green">
+                                    <rect x="20" y="20" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="50" y="20" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="80" y="20" width="20" height="20" rx="4" fill="currentColor" fill-opacity="0.5"/>
+                                    <rect x="20" y="50" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="50" y="50" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="20" y="80" width="20" height="20" rx="4" fill="currentColor"/>
+                                </svg>
+                            </div>
+                            <span class="text-xs text-neutral-500 block text-center">favicon.ico</span>
+                        </div>
+                        
+                        <div>
+                            <div class="w-16 h-16 bg-brand-green rounded-xl flex items-center justify-center mb-2 shadow-lg shadow-green-900/50">
+                                <svg width="40" height="40" viewBox="0 0 100 100" fill="none" class="text-black">
+                                    <rect x="20" y="20" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="50" y="20" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="80" y="20" width="20" height="20" rx="4" fill="currentColor" fill-opacity="0.5"/>
+                                    <rect x="20" y="50" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="50" y="50" width="20" height="20" rx="4" fill="currentColor"/>
+                                    <rect x="20" y="80" width="20" height="20" rx="4" fill="currentColor"/>
+                                </svg>
+                            </div>
+                            <span class="text-xs text-neutral-500 block text-center">apple-touch</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: HERO ILLUSTRATION -->
+            <section id="hero" class="scroll-mt-24">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-purple/10 flex items-center justify-center text-brand-purple border border-brand-purple/20">3</div>
+                    <h2 class="text-2xl font-bold">Hero Illustration Asset</h2>
+                </div>
+                <p class="text-neutral-400 mb-6 max-w-2xl">
+                    A complex perspective SVG for use in Hero.tsx backgrounds or main visuals. Features floating node architecture with animated data flows.
+                </p>
+                
+                <div class="w-full bg-neutral-900 rounded-xl overflow-hidden relative h-[500px] border border-white/10 flex items-center justify-center group">
+                    <!-- Grid Floor -->
+                    <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [transform:perspective(1000px)_rotateX(60deg)_scale(2)] origin-top"></div>
+                    
+                    <!-- Floating Elements -->
+                    <svg width="600" height="400" viewBox="0 0 600 400" fill="none" class="relative z-10 animate-float drop-shadow-2xl">
+                        <!-- Back Layer (Shadow) -->
+                        <rect x="180" y="80" width="240" height="240" rx="20" fill="#000" fill-opacity="0.5" />
+
+                        <!-- Main Board -->
+                        <rect x="150" y="50" width="300" height="300" rx="24" fill="#121214" stroke="#333" stroke-width="2"/>
+                        
+                        <!-- Logo Constructed Inside -->
+                        <g transform="translate(190, 90) scale(1.5)">
+                            <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#333" stroke-width="4"/>
+                            <path d="M40 32 H48 M64 32 H72" stroke="#22c55e" stroke-width="2" class="animate-data-path"/>
+
+                            <rect x="24" y="24" width="16" height="16" rx="4" fill="#09090b" stroke="#22c55e" stroke-width="1.5" class="animate-node-pulse" style="animation-delay:0s"/>
+                            <rect x="48" y="24" width="16" height="16" rx="4" fill="#09090b" stroke="#22c55e" stroke-width="1.5" class="animate-node-pulse" style="animation-delay:0.2s"/>
+                            <rect x="72" y="24" width="16" height="16" rx="4" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.5" class="animate-node-pulse" style="animation-delay:0.4s"/>
+                            
+                            <rect x="24" y="48" width="16" height="16" rx="4" fill="#09090b" stroke="#52525b" stroke-width="1.5"/>
+                            <rect x="48" y="48" width="16" height="16" rx="4" fill="#09090b" stroke="#52525b" stroke-width="1.5"/>
+                            <rect x="24" y="72" width="16" height="16" rx="4" fill="#09090b" stroke="#52525b" stroke-width="1.5"/>
+                        </g>
+                        
+                        <!-- Floating Satellites -->
+                        <rect x="480" y="150" width="60" height="40" rx="8" fill="#18181b" stroke="#22c55e" stroke-width="1" class="animate-float" style="animation-delay: 1s"/>
+                        <rect x="60" y="200" width="50" height="50" rx="8" fill="#18181b" stroke="#3f3f46" stroke-width="1" class="animate-float" style="animation-delay: 2s"/>
+
+                        <!-- Connecting Lines -->
+                        <path d="M450 200 C 470 200, 460 170, 480 170" stroke="#22c55e" stroke-width="2" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+                    </svg>
+
+                    <div class="absolute bottom-4 right-4 text-xs font-mono text-neutral-600">Preview: Hero Composition</div>
+                </div>
+            </section>
+
+            <!-- SECTION 4: COLOR SYSTEM -->
+            <section id="colors" class="scroll-mt-24">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-orange/10 flex items-center justify-center text-brand-orange border border-brand-orange/20">4</div>
+                    <h2 class="text-2xl font-bold">Color System</h2>
+                </div>
+                
+                <p class="text-neutral-400 mb-6">Semantic colors used to denote node types and logic states.</p>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div class="space-y-2">
+                        <div class="h-24 rounded-lg bg-brand-green flex items-end p-3 shadow-[0_0_20px_-5px_rgba(74,222,128,0.3)]">
+                            <span class="text-black font-mono text-xs font-bold">Green-400</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-neutral-500 font-mono">
+                            <span>Success</span>
+                            <span>#4ade80</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="h-24 rounded-lg bg-brand-blue flex items-end p-3">
+                            <span class="text-black font-mono text-xs font-bold">Blue-400</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-neutral-500 font-mono">
+                            <span>Inputs</span>
+                            <span>#60a5fa</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="h-24 rounded-lg bg-brand-purple flex items-end p-3">
+                            <span class="text-black font-mono text-xs font-bold">Purple-400</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-neutral-500 font-mono">
+                            <span>Properties</span>
+                            <span>#c084fc</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="h-24 rounded-lg bg-brand-orange flex items-end p-3">
+                            <span class="text-black font-mono text-xs font-bold">Orange-400</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-neutral-500 font-mono">
+                            <span>Warnings</span>
+                            <span>#fb923c</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Neutral Scale -->
+                <div>
+                    <h3 class="text-sm font-semibold text-white mb-4">UI Neutrals (Backgrounds)</h3>
+                    <div class="flex h-16 rounded-xl overflow-hidden border border-white/10">
+                        <div class="flex-1 bg-neutral-800 flex items-center justify-center text-xs text-neutral-300">800</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 5: TYPOGRAPHY -->
+            <section id="typography" class="scroll-mt-24">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-cyan/10 flex items-center justify-center text-brand-cyan border border-brand-cyan/20">5</div>
+                    <h2 class="text-2xl font-bold">Typography</h2>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-12">
+                    <div>
+                        <h3 class="text-sm font-mono text-neutral-500 mb-4 border-b border-white/10 pb-2">PRIMARY FONT (INTER)</h3>
+                        <div class="space-y-6">
+                            <div>
+                                <p class="text-4xl font-bold text-white">Display Bold</p>
+                                <p class="text-xs text-neutral-500 mt-1">Headers, Hero Sections</p>
+                            </div>
+                            <div>
+                                <p class="text-xl font-semibold text-white">Section Heading</p>
+                                <p class="text-xs text-neutral-500 mt-1">Card Titles, H2, H3</p>
+                            </div>
+                            <div>
+                                <p class="text-base text-neutral-300">Standard body text should be neutral-300 to reduce eye strain on dark backgrounds.</p>
+                                <p class="text-xs text-neutral-500 mt-1">Paragraphs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-neutral-500 uppercase tracking-widest">Small Labels</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-mono text-neutral-500 mb-4 border-b border-white/10 pb-2">CODE FONT (JETBRAINS MONO)</h3>
+                        <div class="space-y-4">
+                            <div class="bg-[#121212] p-4 rounded-lg border border-white/10">
+                                <p class="font-mono text-sm text-brand-purple">const <span class="text-brand-blue">Flow</span> = <span class="text-brand-orange">require</span>('logic');</p>
+                                <p class="font-mono text-sm text-neutral-400">// Used for editor blocks and data</p>
+                            </div>
+                            
+                            <div class="flex gap-2">
+                                <span class="px-2 py-1 bg-neutral-800 rounded text-xs font-mono text-neutral-300">v0.5.0</span>
+                                <span class="px-2 py-1 bg-brand-green/10 border border-brand-green/20 rounded text-xs font-mono text-brand-green">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 6: COMPONENTS -->
+            <section id="components" class="scroll-mt-24 mb-32">
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-8 h-8 rounded-lg bg-brand-pink/10 flex items-center justify-center text-brand-pink border border-brand-pink/20">6</div>
+                    <h2 class="text-2xl font-bold">Components</h2>
+                </div>
+
+                <div class="grid lg:grid-cols-2 gap-8 mb-12">
+                    <!-- Node Cards -->
+                    <div class="space-y-6">
+                        <h3 class="text-sm font-mono text-neutral-500">NODE CARDS</h3>
+                        
+                        <!-- Green Node -->
+                        <div class="w-64 rounded-xl overflow-hidden bg-neutral-900/80 backdrop-blur-sm border border-brand-green/30 shadow-[0_0_15px_-5px_rgba(74,222,128,0.1)]">
+                            <div class="px-4 py-3 bg-gradient-to-r from-brand-green/10 to-neutral-900/50 border-b border-white/5 flex items-center gap-2">
+                                <div class="w-6 h-6 rounded bg-brand-green/20 flex items-center justify-center">
+                                    <svg class="w-3 h-3 text-brand-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                </div>
+                                <span class="text-sm font-medium text-white">Generator</span>
+                            </div>
+                            <div class="p-4 space-y-3">
+                                <div class="flex justify-between items-center text-xs">
+                                    <span class="text-neutral-400">Status</span>
+                                    <span class="text-brand-green">Ready</span>
+                                </div>
+                                <div class="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
+                                    <div class="h-full w-2/3 bg-brand-green"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Purple Node -->
+                        <div class="w-64 rounded-xl overflow-hidden bg-neutral-900/80 backdrop-blur-sm border border-neutral-800 hover:border-brand-purple/50 transition-colors">
+                            <div class="px-4 py-3 bg-neutral-900 border-b border-white/5 flex items-center gap-2">
+                                <div class="w-6 h-6 rounded bg-brand-purple/20 flex items-center justify-center">
+                                    <svg class="w-3 h-3 text-brand-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                </div>
+                                <span class="text-sm font-medium text-white">Config</span>
+                            </div>
+                            <div class="p-4">
+                                <code class="block text-xs font-mono text-neutral-500 mb-2">height: 12</code>
+                                <code class="block text-xs font-mono text-neutral-500">material: stone</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buttons & Elements -->
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-sm font-mono text-neutral-500 mb-4">BUTTON VARIANTS</h3>
+                            <div class="flex flex-wrap gap-4">
+                                <!-- Primary -->
+                                <button class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-black rounded-lg bg-brand-green hover:bg-brand-green/90 transition-all shadow-[0_0_15px_-3px_rgba(74,222,128,0.4)]">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
+                                    Execute Flow
+                                </button>
+                                
+                                <!-- Secondary -->
+                                <button class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-900 border border-white/10 hover:border-white/20 transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                    Save Schematic
+                                </button>
+                                
+                                <!-- Ghost -->
+                                <button class="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Help
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-sm font-mono text-neutral-500 mb-4">INFO CALLOUTS</h3>
+                            <div class="p-4 rounded-xl border border-brand-orange/20 bg-brand-orange/5">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <svg class="w-4 h-4 text-brand-orange" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    <span class="text-sm font-medium text-brand-orange">Compilation Warning</span>
+                                </div>
+                                <p class="text-xs text-neutral-400">Node #42 is disconnected from the main execution tree.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+</body>
+</html>

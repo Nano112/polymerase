@@ -2,11 +2,20 @@ import { Layers, Code, Database, Globe } from 'lucide-react';
 
 export function Philosophy() {
   return (
-    <section className="py-24 px-6 border-t border-white/5 bg-neutral-950">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+    <section className="py-32 px-6 bg-[#0a0a0a] relative overflow-hidden border-t border-white/5">
+      {/* Background Grid */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] bg-[size:24px_24px] opacity-20 pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center relative z-10">
         <div>
-          <h2 className="text-3xl md:text-5xl font-bold mb-6">Logic, Abstracted.</h2>
-          <div className="space-y-6 text-neutral-400 text-lg">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-neutral-400 mb-6">
+            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+            PHILOSOPHY
+          </div>
+
+          <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight text-white">Logic, Abstracted.</h2>
+          
+          <div className="space-y-6 text-neutral-400 text-lg leading-relaxed">
             <p>
               Building complex generators requires more than just placing blocks. Flow allows you to create 
               <span className="text-white font-semibold"> reusable logic units</span> (Subflows) that act like functions in code.
@@ -16,35 +25,52 @@ export function Philosophy() {
             </p>
           </div>
           
-          <div className="mt-8 flex gap-4 text-sm font-mono text-green-400">
-            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20">.flow</span>
-            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20">.schem</span>
-            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20">JSON API</span>
+          <div className="mt-8 flex flex-wrap gap-3 text-sm font-mono text-green-400">
+            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-default">.flow</span>
+            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-default">.schem</span>
+            <span className="px-3 py-1 bg-green-500/10 rounded border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-default">JSON API</span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-6 bg-[#121214] border border-white/5 rounded-xl">
-            <Layers className="w-8 h-8 text-purple-400 mb-4" />
-            <h3 className="text-white font-bold mb-2">Recursive Subflows</h3>
-            <p className="text-neutral-500 text-sm">Package complex logic into a single node. Nest flows infinitely.</p>
-          </div>
-          <div className="p-6 bg-[#121214] border border-white/5 rounded-xl mt-8">
-            <Code className="w-8 h-8 text-blue-400 mb-4" />
-            <h3 className="text-white font-bold mb-2">Synthase Script</h3>
-            <p className="text-neutral-500 text-sm">Drop into JS when visual nodes aren't enough. Full AST control.</p>
-          </div>
-          <div className="p-6 bg-[#121214] border border-white/5 rounded-xl">
-            <Database className="w-8 h-8 text-yellow-400 mb-4" />
-            <h3 className="text-white font-bold mb-2">Strict Schemas</h3>
-            <p className="text-neutral-500 text-sm">Type-safe inputs and outputs ensure your tools are robust.</p>
-          </div>
-          <div className="p-6 bg-[#121214] border border-white/5 rounded-xl mt-8">
-            <Globe className="w-8 h-8 text-green-400 mb-4" />
-            <h3 className="text-white font-bold mb-2">Instant API</h3>
-            <p className="text-neutral-500 text-sm">Your flow becomes a REST endpoint automatically.</p>
-          </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FeatureCard 
+            icon={Layers} 
+            color="text-purple-400" 
+            title="Recursive Subflows" 
+            desc="Package complex logic into a single node. Nest flows infinitely."
+          />
+          <FeatureCard 
+            icon={Code} 
+            color="text-blue-400" 
+            title="Synthase Script" 
+            desc="Drop into JS when visual nodes aren't enough. Full AST control."
+          />
+          <FeatureCard 
+            icon={Database} 
+            color="text-yellow-400" 
+            title="Strict Schemas" 
+            desc="Type-safe inputs and outputs ensure your tools are robust."
+          />
+          <FeatureCard 
+            icon={Globe} 
+            color="text-green-400" 
+            title="Instant API" 
+            desc="Your flow becomes a REST endpoint automatically."
+          />
         </div>
       </div>
     </section>
+  );
+}
+
+function FeatureCard({ icon: Icon, color, title, desc, className = "" }: { icon: any, color: string, title: string, desc: string, className?: string }) {
+  return (
+    <div className={`h-full p-6 bg-[#0c0c0e] border border-white/10 rounded-xl hover:border-white/20 transition-all duration-300 group flex flex-col ${className}`}>
+      <div className="w-12 h-12 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+        <Icon className={`w-6 h-6 ${color}`} />
+      </div>
+      <h3 className="text-white font-bold mb-2">{title}</h3>
+      <p className="text-neutral-400 text-sm leading-relaxed flex-1">{desc}</p>
+    </div>
   );
 }

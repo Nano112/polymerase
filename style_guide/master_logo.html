@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow - Master Logo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        neutral: {
+                            850: '#1f1f1f',
+                            900: '#171717',
+                            950: '#0a0a0a', 
+                        },
+                        brand: {
+                            green: '#4ade80',
+                            blue: '#60a5fa',
+                            purple: '#c084fc',
+                            orange: '#fb923c',
+                            pink: '#f472b6',
+                            cyan: '#22d3ee',
+                            amber: '#fbbf24',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background-color: #0a0a0a; 
+            color: #e5e5e5; 
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .grid-bg {
+            background-image: linear-gradient(to right, #222 1px, transparent 1px),
+                              linear-gradient(to bottom, #222 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        /* Wave propagation - cascading through nodes */
+        @keyframes wave-node {
+            0%, 100% { 
+                fill-opacity: 0.1;
+                stroke-opacity: 0.4;
+            }
+            40%, 60% {
+                fill-opacity: 0.35;
+                stroke-opacity: 1;
+            }
+        }
+        
+        .wave-1 { animation: wave-node 2s ease-in-out infinite; }
+        .wave-2 { animation: wave-node 2s ease-in-out infinite 0.12s; }
+        .wave-3 { animation: wave-node 2s ease-in-out infinite 0.24s; }
+        .wave-4 { animation: wave-node 2s ease-in-out infinite 0.36s; }
+        .wave-5 { animation: wave-node 2s ease-in-out infinite 0.48s; }
+        .wave-6 { animation: wave-node 2s ease-in-out infinite 0.60s; }
+
+        /* Line draw animation */
+        @keyframes line-reveal {
+            0% { 
+                stroke-dashoffset: 12;
+                stroke-opacity: 0;
+            }
+            100% { 
+                stroke-dashoffset: 0;
+                stroke-opacity: 1;
+            }
+        }
+        
+        .line-wave-1 { stroke-dasharray: 12; animation: line-reveal 0.5s ease-out forwards 0.1s; stroke-opacity: 0; }
+        .line-wave-2 { stroke-dasharray: 12; animation: line-reveal 0.5s ease-out forwards 0.2s; stroke-opacity: 0; }
+        .line-wave-3 { stroke-dasharray: 12; animation: line-reveal 0.5s ease-out forwards 0.3s; stroke-opacity: 0; }
+        .line-wave-4 { stroke-dasharray: 12; animation: line-reveal 0.5s ease-out forwards 0.4s; stroke-opacity: 0; }
+        .line-wave-5 { stroke-dasharray: 12; animation: line-reveal 0.5s ease-out forwards 0.5s; stroke-opacity: 0; }
+
+        /* Continuous flow along path */
+        @keyframes flow-stream {
+            from { stroke-dashoffset: 16; }
+            to { stroke-dashoffset: 0; }
+        }
+        .stream {
+            stroke-dasharray: 4 4;
+            animation: flow-stream 0.6s linear infinite;
+        }
+
+        /* Subtle glow pulse on active node */
+        @keyframes glow {
+            0%, 100% { filter: drop-shadow(0 0 2px currentColor); }
+            50% { filter: drop-shadow(0 0 8px currentColor); }
+        }
+        .glow { animation: glow 2s ease-in-out infinite; }
+
+        /* Hover effects */
+        .logo-card:hover .logo-scale {
+            transform: scale(1.03);
+        }
+        .logo-scale {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        .logo-card:hover .logo-glow {
+            filter: drop-shadow(0 0 16px rgba(74, 222, 128, 0.3));
+        }
+        .logo-glow {
+            transition: filter 0.4s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+
+    <div class="max-w-6xl mx-auto space-y-16">
+        
+        <!-- Header -->
+        <div>
+            <h1 class="text-3xl font-bold mb-2">Flow Logo System</h1>
+            <p class="text-neutral-400">Complete logo variants, states, and color adaptations</p>
+        </div>
+
+        <!-- ===== SECTION 1: STATIC LOGOS ===== -->
+        <section>
+            <h2 class="text-xs font-mono text-brand-green mb-6 uppercase tracking-widest">01. Static Variants</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <!-- Primary Static -->
+                <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-8 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="absolute inset-0 grid-bg opacity-20"></div>
+                    <div class="absolute top-3 left-3 text-[10px] font-mono text-neutral-600">PRIMARY</div>
+                    
+                    <svg width="120" height="120" viewBox="0 0 100 100" fill="none" class="relative z-10">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80" fill-opacity="0.2" stroke="#4ade80" stroke-width="1.5"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#404040" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4">Flow</span>
+                </div>
+
+                <!-- Monochrome -->
+                <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-8 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="absolute inset-0 grid-bg opacity-20"></div>
+                    <div class="absolute top-3 left-3 text-[10px] font-mono text-neutral-600">MONO</div>
+                    
+                    <svg width="120" height="120" viewBox="0 0 100 100" fill="none" class="relative z-10">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.25" stroke-width="1.5"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.25" stroke="#fff" stroke-width="1.5"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#fff" stroke-opacity="0.35" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4 text-white/70">Flow</span>
+                </div>
+
+                <!-- Outline -->
+                <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-8 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="absolute inset-0 grid-bg opacity-20"></div>
+                    <div class="absolute top-3 left-3 text-[10px] font-mono text-neutral-600">OUTLINE</div>
+                    
+                    <svg width="120" height="120" viewBox="0 0 100 100" fill="none" class="relative z-10">
+                        <rect x="24" y="24" width="16" height="16" rx="4" stroke="#4ade80" stroke-width="1.5"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" stroke="#4ade80" stroke-width="1.5"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" stroke="#4ade80" stroke-width="1.5"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" stroke="#4ade80" stroke-width="1.5"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" stroke="#4ade80" stroke-width="1.5"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#4ade80" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4 text-brand-green">Flow</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SECTION 2: ANIMATED LOGOS ===== -->
+        <section>
+            <h2 class="text-xs font-mono text-brand-blue mb-6 uppercase tracking-widest">02. Animated States</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- Wave Propagation -->
+                <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-10 flex flex-col items-center justify-center relative overflow-hidden logo-card">
+                    <div class="absolute inset-0 grid-bg opacity-20"></div>
+                    <div class="absolute top-3 left-3 text-[10px] font-mono text-neutral-600">WAVE PROPAGATION</div>
+                    
+                    <svg width="160" height="160" viewBox="0 0 100 100" fill="none" class="relative z-10 logo-scale logo-glow text-brand-green">
+                        <!-- Nodes cascade from top-left -->
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-1"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-2"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-3 glow"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-3"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-4"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="wave-5"/>
+                        
+                        <!-- Lines draw in sequence -->
+                        <path d="M40 32 H48" stroke="currentColor" stroke-width="2" class="line-wave-1"/>
+                        <path d="M64 32 H72" stroke="currentColor" stroke-width="2" class="line-wave-2"/>
+                        <path d="M32 40 V48" stroke="currentColor" stroke-width="2" class="line-wave-2"/>
+                        <path d="M40 56 H48" stroke="currentColor" stroke-width="2" class="line-wave-3"/>
+                        <path d="M32 64 V72" stroke="currentColor" stroke-width="2" class="line-wave-4"/>
+                    </svg>
+                    <span class="text-2xl font-bold tracking-tight mt-6">Flow</span>
+                    <p class="text-xs text-neutral-500 mt-1">Hover for microinteraction</p>
+                </div>
+
+                <!-- Data Stream -->
+                <div class="bg-[#0c0c0e] border border-white/10 rounded-xl p-10 flex flex-col items-center justify-center relative overflow-hidden logo-card">
+                    <div class="absolute inset-0 grid-bg opacity-20"></div>
+                    <div class="absolute top-3 left-3 text-[10px] font-mono text-neutral-600">DATA STREAM</div>
+                    
+                    <svg width="160" height="160" viewBox="0 0 100 100" fill="none" class="relative z-10 logo-scale">
+                        <!-- Static structure -->
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80" fill-opacity="0.2" stroke="#4ade80" stroke-width="1.5" class="glow text-brand-green"/>
+                        
+                        <!-- Base lines -->
+                        <path d="M40 32 H48 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#333" stroke-width="2"/>
+                        <path d="M64 32 H72" stroke="#4ade80" stroke-opacity="0.2" stroke-width="2"/>
+                        
+                        <!-- Animated stream -->
+                        <path d="M64 32 H72" stroke="#4ade80" stroke-width="2" class="stream"/>
+                    </svg>
+                    <span class="text-2xl font-bold tracking-tight mt-6">Flow</span>
+                    <p class="text-xs text-neutral-500 mt-1">Continuous data flow</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SECTION 3: SEMANTIC COLORS ===== -->
+        <section>
+            <h2 class="text-xs font-mono text-brand-purple mb-6 uppercase tracking-widest">03. Semantic Colors</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                
+                <!-- Green -->
+                <div class="bg-[#0c0c0e] border border-brand-green/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#4ade80" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Success</span>
+                    <span class="text-[10px] font-mono text-brand-green">#4ade80</span>
+                </div>
+
+                <!-- Blue -->
+                <div class="bg-[#0c0c0e] border border-brand-blue/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#60a5fa" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#60a5fa" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Input</span>
+                    <span class="text-[10px] font-mono text-brand-blue">#60a5fa</span>
+                </div>
+
+                <!-- Purple -->
+                <div class="bg-[#0c0c0e] border border-brand-purple/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#c084fc" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#c084fc" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Config</span>
+                    <span class="text-[10px] font-mono text-brand-purple">#c084fc</span>
+                </div>
+
+                <!-- Orange -->
+                <div class="bg-[#0c0c0e] border border-brand-orange/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#fb923c" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#fb923c" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Warning</span>
+                    <span class="text-[10px] font-mono text-brand-orange">#fb923c</span>
+                </div>
+
+                <!-- Cyan -->
+                <div class="bg-[#0c0c0e] border border-brand-cyan/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#22d3ee" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#22d3ee" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Process</span>
+                    <span class="text-[10px] font-mono text-brand-cyan">#22d3ee</span>
+                </div>
+
+                <!-- Pink -->
+                <div class="bg-[#0c0c0e] border border-brand-pink/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#f472b6" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#f472b6" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Creative</span>
+                    <span class="text-[10px] font-mono text-brand-pink">#f472b6</span>
+                </div>
+
+                <!-- Amber -->
+                <div class="bg-[#0c0c0e] border border-brand-amber/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#fbbf24" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#fbbf24" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Pending</span>
+                    <span class="text-[10px] font-mono text-brand-amber">#fbbf24</span>
+                </div>
+
+                <!-- Red -->
+                <div class="bg-[#0c0c0e] border border-red-500/20 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#262626"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#ef4444" fill-opacity="0.3"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#ef4444" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-3">Error</span>
+                    <span class="text-[10px] font-mono text-red-500">#ef4444</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SECTION 4: LIGHT MODE / PRINT ===== -->
+        <section>
+            <h2 class="text-xs font-mono text-brand-orange mb-6 uppercase tracking-widest">04. Light Mode & Print</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <!-- Light Full Color -->
+                <div class="bg-white border border-neutral-200 rounded-xl p-8 flex flex-col items-center justify-center">
+                    <div class="text-[10px] font-mono text-neutral-400 mb-4 self-start">LIGHT MODE</div>
+                    <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#f5f5f5" stroke="#171717" stroke-width="1.5"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#f5f5f5" stroke="#171717" stroke-width="1.5"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#f5f5f5" stroke="#171717" stroke-width="1.5"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#f5f5f5" stroke="#171717" stroke-width="1.5"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#f5f5f5" stroke="#171717" stroke-width="1.5"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#22c55e" stroke="#16a34a" stroke-width="1.5"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#171717" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4 text-neutral-900">Flow</span>
+                </div>
+
+                <!-- Print Black -->
+                <div class="bg-white border border-neutral-200 rounded-xl p-8 flex flex-col items-center justify-center">
+                    <div class="text-[10px] font-mono text-neutral-400 mb-4 self-start">PRINT — SOLID</div>
+                    <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#000" stroke-width="3"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4 text-black">Flow</span>
+                </div>
+
+                <!-- Print Outline -->
+                <div class="bg-white border border-neutral-200 rounded-xl p-8 flex flex-col items-center justify-center">
+                    <div class="text-[10px] font-mono text-neutral-400 mb-4 self-start">PRINT — OUTLINE</div>
+                    <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" stroke="#000" stroke-width="2"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" stroke="#000" stroke-width="2"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" stroke="#000" stroke-width="2"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" stroke="#000" stroke-width="2"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" stroke="#000" stroke-width="2"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#000" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight mt-4 text-black">Flow</span>
+                </div>
+            </div>
+            
+            <!-- Additional variants row -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                
+                <!-- Grayscale -->
+                <div class="bg-neutral-100 border border-neutral-200 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="48" height="48" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#d4d4d4"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#d4d4d4"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#d4d4d4"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#d4d4d4"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#d4d4d4"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#737373"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#a3a3a3" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-2">Grayscale</span>
+                </div>
+
+                <!-- Knockout on Green -->
+                <div class="bg-brand-green rounded-xl p-5 flex flex-col items-center">
+                    <svg width="48" height="48" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.3"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.3"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.3"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.3"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#fff" fill-opacity="0.3"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#fff"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#fff" stroke-width="2"/>
+                    </svg>
+                    <span class="text-xs font-mono text-white/80 mt-2">Knockout</span>
+                </div>
+
+                <!-- Solid Green Dark -->
+                <div class="bg-neutral-900 border border-white/10 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="48" height="48" viewBox="0 0 100 100" fill="none">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#4ade80"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#4ade80" stroke-width="3"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-500 mt-2">Solid</span>
+                </div>
+
+                <!-- Watermark -->
+                <div class="bg-white border border-neutral-200 rounded-xl p-5 flex flex-col items-center">
+                    <svg width="48" height="48" viewBox="0 0 100 100" fill="none" opacity="0.12">
+                        <rect x="24" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="24" y="48" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="24" y="72" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="48" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="48" y="48" width="16" height="16" rx="4" fill="#000"/>
+                        <rect x="72" y="24" width="16" height="16" rx="4" fill="#000"/>
+                        <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" stroke="#000" stroke-width="3"/>
+                    </svg>
+                    <span class="text-xs font-mono text-neutral-400 mt-2">Watermark</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SECTION 5: FAVICONS ===== -->
+        <section class="pb-16">
+            <h2 class="text-xs font-mono text-brand-cyan mb-6 uppercase tracking-widest">05. App Icons & Favicons</h2>
+            <div class="flex flex-wrap gap-6 items-end">
+                
+                <!-- 64px -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-16 h-16 bg-[#0c0c0e] rounded-xl flex items-center justify-center border border-white/10">
+                        <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                            <rect x="20" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="80" y="20" width="20" height="20" rx="5" fill="#4ade80" fill-opacity="0.4"/>
+                            <rect x="20" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="20" y="80" width="20" height="20" rx="5" fill="#4ade80"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">64px</span>
+                </div>
+
+                <!-- 48px -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-12 h-12 bg-[#0c0c0e] rounded-lg flex items-center justify-center border border-white/10">
+                        <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
+                            <rect x="20" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="80" y="20" width="20" height="20" rx="5" fill="#4ade80" fill-opacity="0.4"/>
+                            <rect x="20" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="20" y="80" width="20" height="20" rx="5" fill="#4ade80"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">48px</span>
+                </div>
+
+                <!-- 32px -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-8 h-8 bg-[#0c0c0e] rounded-md flex items-center justify-center border border-white/10">
+                        <svg width="20" height="20" viewBox="0 0 100 100" fill="none">
+                            <rect x="20" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="80" y="20" width="20" height="20" rx="5" fill="#4ade80" fill-opacity="0.4"/>
+                            <rect x="20" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="20" y="80" width="20" height="20" rx="5" fill="#4ade80"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">32px</span>
+                </div>
+
+                <!-- 16px -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-4 h-4 bg-[#0c0c0e] rounded flex items-center justify-center border border-white/10">
+                        <svg width="12" height="12" viewBox="0 0 100 100" fill="none">
+                            <rect x="10" y="10" width="28" height="28" rx="4" fill="#4ade80"/>
+                            <rect x="48" y="10" width="28" height="28" rx="4" fill="#4ade80"/>
+                            <rect x="10" y="48" width="28" height="28" rx="4" fill="#4ade80"/>
+                            <rect x="48" y="48" width="28" height="28" rx="4" fill="#4ade80"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">16px</span>
+                </div>
+
+                <div class="w-px h-12 bg-white/10 mx-2"></div>
+
+                <!-- Apple Touch -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-16 h-16 bg-brand-green rounded-2xl flex items-center justify-center shadow-lg shadow-green-900/30">
+                        <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+                            <rect x="20" y="20" width="20" height="20" rx="5" fill="#000"/>
+                            <rect x="50" y="20" width="20" height="20" rx="5" fill="#000"/>
+                            <rect x="80" y="20" width="20" height="20" rx="5" fill="#000" fill-opacity="0.4"/>
+                            <rect x="20" y="50" width="20" height="20" rx="5" fill="#000"/>
+                            <rect x="50" y="50" width="20" height="20" rx="5" fill="#000"/>
+                            <rect x="20" y="80" width="20" height="20" rx="5" fill="#000"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">iOS</span>
+                </div>
+
+                <!-- Android -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="w-16 h-16 bg-[#0c0c0e] rounded-full flex items-center justify-center border border-brand-green/30">
+                        <svg width="32" height="32" viewBox="0 0 100 100" fill="none">
+                            <rect x="20" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="20" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="80" y="20" width="20" height="20" rx="5" fill="#4ade80" fill-opacity="0.4"/>
+                            <rect x="20" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="50" y="50" width="20" height="20" rx="5" fill="#4ade80"/>
+                            <rect x="20" y="80" width="20" height="20" rx="5" fill="#4ade80"/>
+                        </svg>
+                    </div>
+                    <span class="text-xs text-neutral-500">Android</span>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>
