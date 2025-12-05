@@ -3,6 +3,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   FolderOpen, 
@@ -37,11 +38,13 @@ interface FlowManagerProps {
 }
 
 export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
-  const queryClient = useQueryClient();
-  const { loadFlow, exportFlow, clearFlow, flowId, flowName } = useFlowStore();
-  const [newFlowName, setNewFlowName] = useState('');
+  const navigate = useNavigate();
   const [showNewFlow, setShowNewFlow] = useState(false);
+  const [newFlowName, setNewFlowName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  
+  const { loadFlow, exportFlow, clearFlow, flowId, flowName } = useFlowStore();
 
   // Export flow to file
   const handleExportToFile = () => {
@@ -133,20 +136,6 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
     enabled: isOpen,
   });
 
-  // Load a flow
-  const loadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`${SERVER_URL}/api/flows/${id}`);
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      return json.flow;
-    },
-    onSuccess: (flow) => {
-      loadFlow(flow.jsonContent);
-      onClose();
-    },
-  });
-
   // Save current flow
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -190,6 +179,7 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
       setShowNewFlow(false);
       setNewFlowName('');
+      navigate(`/flow/${flow.id}`);
       onClose();
     },
   });
@@ -368,7 +358,10 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
                   : 'border-neutral-800/50 bg-neutral-900/30 hover:border-neutral-700/50 hover:bg-neutral-800/30'
                 }
               `}
-              onClick={() => !loadMutation.isPending && loadMutation.mutate(flow.id)}
+              onClick={() => {
+                navigate(`/flow/${flow.id}`);
+                onClose();
+              }}
             >
               <div className="flex items-center gap-4">
                 <div className={`
@@ -397,9 +390,6 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
               </div>
 
               <div className="flex items-center gap-2">
-                {loadMutation.isPending && loadMutation.variables === flow.id && (
-                  <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
-                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

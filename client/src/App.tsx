@@ -4,7 +4,9 @@
 
 import { ReactFlowProvider } from '@xyflow/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Editor } from './components/editor/Editor';
+import { Home } from './components/Home';
 
 const queryClient = new QueryClient();
 
@@ -12,7 +14,13 @@ function App() {
 	return (
 		<QueryClientProvider client={queryClient}>
 			<ReactFlowProvider>
-				<Editor />
+				<BrowserRouter>
+					<Routes>
+						<Route path="/" element={<Home />} />
+						<Route path="/editor" element={<Editor />} />
+						<Route path="/flow/:flowId" element={<Editor />} />
+					</Routes>
+				</BrowserRouter>
 			</ReactFlowProvider>
 		</QueryClientProvider>
 	);

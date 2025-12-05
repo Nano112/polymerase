@@ -3,6 +3,8 @@
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   ReactFlow,
   Background,
@@ -51,8 +53,12 @@ import { CommandPalette } from '../ui/CommandPalette';
 import { useLocalExecutor } from '../../hooks/useLocalExecutor';
 import { parseExecutionError, createSimpleError } from '../../lib/utils';
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? '';
+
 export function Editor() {
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
+  const { flowId: urlFlowId } = useParams();
+  const navigate = useNavigate();
   
   const {
     nodes,
@@ -62,6 +68,7 @@ export function Editor() {
     onConnect,
     flowName,
     flowId,
+    loadFlow,
     setFlowName,
     selectedNodeId,
     selectNode,
@@ -82,6 +89,37 @@ export function Editor() {
     debugMode,
     toggleDebugMode,
   } = useFlowStore();
+
+  // Fetch flow if URL has ID
+  const { data: flowData, isLoading: isFlowLoading } = useQuery({
+    queryKey: ['flow', urlFlowId],
+    queryFn: async () => {
+      if (!urlFlowId) return null;
+      const res = await fetch(`${SERVER_URL}/api/flows/${urlFlowId}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      return json.flow;
+    },
+    enabled: !!urlFlowId && urlFlowId !== flowId,
+    retry: false,
+  });
+
+  // Load flow data when fetched
+  useEffect(() => {
+    if (flowData) {
+      loadFlow(flowData.jsonContent);
+    }
+  }, [flowData, loadFlow]);
+
+  // Sync URL with store state
+  useEffect(() => {
+    if (flowId && flowId !== urlFlowId) {
+      navigate(`/flow/${flowId}`, { replace: true });
+    } else if (!flowId && urlFlowId && !isFlowLoading && !flowData) {
+      // If store has no ID but URL does, and we aren't loading, navigate to new editor
+      navigate('/editor', { replace: true });
+    }
+  }, [flowId, urlFlowId, navigate, isFlowLoading, flowData]);
 
   // Modal states
   const [showFlowManager, setShowFlowManager] = useState(false);
