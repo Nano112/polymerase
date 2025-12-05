@@ -26,7 +26,6 @@ import {
   Terminal,
   Code,
   RotateCcw,
-  ChevronDown,
   Menu,
   X,
   Plus,
@@ -38,6 +37,7 @@ import {
   Grid3X3,
   HelpCircle,
   Eye,
+  Globe,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
@@ -47,9 +47,11 @@ import { CodePanel } from './CodePanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { FlowManager } from './FlowManager';
+import { ApiPanel } from './ApiPanel';
 import { Modal } from '../ui/Modal';
 import { ShortcutsModal } from '../ui/ShortcutsModal';
 import { CommandPalette } from '../ui/CommandPalette';
+import { MobileNodeDrawer } from './MobileNodeDrawer';
 import { useLocalExecutor } from '../../hooks/useLocalExecutor';
 import { parseExecutionError, createSimpleError } from '../../lib/utils';
 
@@ -112,11 +114,17 @@ export function Editor() {
   }, [flowData, loadFlow]);
 
   // Sync URL with store state
+  // Only sync FROM store TO URL when store has a new flow that wasn't loaded from URL
   useEffect(() => {
-    if (flowId && flowId !== urlFlowId) {
+    // Don't navigate while a flow is loading from the URL
+    if (isFlowLoading) return;
+    
+    // If store has a flow ID that differs from URL, and we're not loading that URL's flow,
+    // it means the store was updated independently (e.g., new flow created, imported)
+    if (flowId && flowId !== urlFlowId && !flowData) {
       navigate(`/flow/${flowId}`, { replace: true });
-    } else if (!flowId && urlFlowId && !isFlowLoading && !flowData) {
-      // If store has no ID but URL does, and we aren't loading, navigate to new editor
+    } else if (!flowId && urlFlowId && !flowData) {
+      // If store has no ID but URL does, and we failed to load it, navigate to new editor
       navigate('/editor', { replace: true });
     }
   }, [flowId, urlFlowId, navigate, isFlowLoading, flowData]);
@@ -126,8 +134,8 @@ export function Editor() {
   const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [showNodeProperties, setShowNodeProperties] = useState(false);
   const [showExecution, setShowExecution] = useState(false);
+  const [showApiPanel, setShowApiPanel] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [showExecuteMenu, setShowExecuteMenu] = useState(false);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -1246,17 +1254,39 @@ export function Editor() {
             </button>
           )}
           
-          {/* Run button - Desktop only, FAB on mobile */}
+          {/* API button - Desktop only */}
+          {!isMobile && flowId && (
+            <button
+              onClick={() => setShowApiPanel(true)}
+              className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+              title="API Settings"
+            >
+              <Globe className="w-4 h-4" />
+              <span className="text-sm hidden sm:inline">API</span>
+            </button>
+          )}
+          
+          {/* Run & Console buttons - Desktop only, FAB on mobile */}
           {!isMobile && (
-            <div className="flex items-center rounded-lg overflow-hidden shadow-sm">
+            <div className="flex items-center gap-1.5">
+              {/* Console button */}
+              <button
+                onClick={() => setShowExecution(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+                title="Open Console"
+              >
+                <Terminal className="w-4 h-4" />
+              </button>
+              
+              {/* Run button */}
               <button
                 onClick={handleQuickRun}
                 disabled={isExecuting}
                 className={`
-                  flex items-center gap-2 px-3 py-2 text-white text-sm font-medium transition-all border-r border-white/10
+                  flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-all
                   ${isExecuting 
-                    ? 'bg-amber-600/80 cursor-wait' 
-                    : 'bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-500/80 hover:to-emerald-500/80'
+                    ? 'bg-amber-500 cursor-wait' 
+                    : 'bg-green-600 hover:bg-green-500'
                   }
                 `}
                 title="Run Flow"
@@ -1264,42 +1294,6 @@ export function Editor() {
                 <Play className="w-4 h-4 fill-current" />
                 {isExecuting ? 'Running...' : 'Run'}
               </button>
-              <div className="relative">
-                <button
-                  onClick={() => setShowExecuteMenu(!showExecuteMenu)}
-                  disabled={isExecuting}
-                  className={`
-                    flex items-center justify-center px-1.5 py-2 text-white transition-all h-full
-                    ${isExecuting 
-                      ? 'bg-amber-600/80 cursor-wait' 
-                      : 'bg-emerald-600/80 hover:bg-emerald-500/80'
-                    }
-                  `}
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                
-                {showExecuteMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowExecuteMenu(false)}
-                    />
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
-                      <button
-                        onClick={() => {
-                          setShowExecution(true);
-                          setShowExecuteMenu(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white flex items-center gap-2"
-                      >
-                        <Terminal className="w-4 h-4" />
-                        Open Console...
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
           )}
         </div>
@@ -1481,43 +1475,29 @@ export function Editor() {
                   : 'bg-gradient-to-br from-green-500 to-emerald-600'
                 }
               `}
-              style={{ bottom: showMobileToolbar ? 'calc(70vh + 1.5rem)' : '5.5rem' }}
+              style={{ right: '5rem', bottom: '1.5rem', left: 'auto' }}
             >
               <Play className="w-6 h-6 text-white fill-white" />
             </button>
             
             {/* Add Node FAB */}
             <button
-              onClick={() => setShowMobileToolbar(!showMobileToolbar)}
-              className={`
-                fab bg-indigo-500 transition-transform duration-300
-                ${showMobileToolbar ? 'rotate-45' : ''}
-              `}
-              style={{ right: '1.5rem', bottom: '1.5rem' }}
+              onClick={() => setShowMobileToolbar(true)}
+              className="fab bg-indigo-500"
+              style={{ right: '1.5rem', bottom: '1.5rem', left: 'auto' }}
             >
               <Plus className="w-6 h-6 text-white" />
             </button>
           </>
         )}
         
-        {/* Mobile Bottom Sheet Toolbar */}
+        {/* Mobile Node Drawer */}
         {isMobile && (
-          <div 
-            className={`mobile-sheet ${showMobileToolbar ? '' : 'collapsed'}`}
-            style={{ transform: showMobileToolbar ? 'translateY(0)' : 'translateY(calc(100% - 0px))' }}
-          >
-            {/* Handle */}
-            <div 
-              className="mobile-sheet-handle cursor-pointer"
-              onClick={() => setShowMobileToolbar(!showMobileToolbar)}
-            />
-            
-            {showMobileToolbar && (
-              <div className="px-4 pb-4">
-                <Toolbar isMobile={true} onNodeAdded={() => setShowMobileToolbar(false)} />
-              </div>
-            )}
-          </div>
+          <MobileNodeDrawer
+            isOpen={showMobileToolbar}
+            onClose={() => setShowMobileToolbar(false)}
+            onNodeAdded={() => setShowMobileToolbar(false)}
+          />
         )}
       </div>
 
@@ -1570,6 +1550,19 @@ export function Editor() {
         size={isMobile ? 'full' : 'lg'}
       >
         <ExecutionPanel workerClient={workerClient} />
+      </Modal>
+
+      {/* API Panel Modal */}
+      <Modal
+        isOpen={showApiPanel}
+        onClose={() => setShowApiPanel(false)}
+        title="Flow API"
+        subtitle="Publish and test as API"
+        icon={<Globe className="w-5 h-5" />}
+        iconColor="text-cyan-400"
+        size={isMobile ? 'full' : 'lg'}
+      >
+        <ApiPanel flowId={flowId || ''} flowName={flowName} onClose={() => setShowApiPanel(false)} />
       </Modal>
 
       {/* Keyboard Shortcuts Modal */}

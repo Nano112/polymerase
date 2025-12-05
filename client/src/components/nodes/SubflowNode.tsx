@@ -104,7 +104,7 @@ function SubflowTestModal({ isOpen, onClose, config, nodeLabel }: SubflowTestMod
         return (
           <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-neutral-800/50 transition-colors border border-transparent hover:border-neutral-800">
             <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${value ? 'bg-indigo-500 border-indigo-500' : 'bg-neutral-900 border-neutral-700'}`}>
-              {value && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+              {Boolean(value) && <CheckCircle className="w-3.5 h-3.5 text-white" />}
             </div>
             <input
               type="checkbox"

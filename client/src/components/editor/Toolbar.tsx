@@ -19,10 +19,11 @@ import {
   FolderTree,
   PanelLeftClose,
   PanelLeftOpen,
-  GripVertical
+  GripVertical,
+  Plus,
+  X
 } from 'lucide-react';
 import { useFlowStore, type FlowNode, type SavedSubflow } from '../../store/flowStore';
-import { extractSubflowConfig } from '@polymerase/core';
 
 interface NodeTemplate {
   type: string;
@@ -127,136 +128,27 @@ const nodeCategories: { name: string; nodes: NodeTemplate[] }[] = [
   },
 ];
 
-const getDefaultCode = () => `export const io = {
-    inputs: {
-        height: { type: 'number', default: 5, description: 'Height of the tower' },
-        width: { type: 'number', default: 3, description: 'Width of the tower' },
-        depth: { type: 'number', default: 3, description: 'Depth of the tower' },
-        material: { 
-            type: 'string', 
-            default: 'minecraft:stone', 
-            description: 'Material to use',
-            options: ['minecraft:stone', 'minecraft:redstone_block', 'minecraft:glass']
-        },
-    },
-    outputs: {
-        schematic: { type: 'object' }
-    }
-};
 
-export default async function({ height, width, depth, material }, { Schematic }) {
-    const schem = new Schematic();
-    
-    // Build vertical tower
-    for (let y = 0; y < height; y++) {
-        schem.set_block(0, y, 0, material);
-    }
-    
-    // Build along width
-    for (let x = 1; x < width; x++) {
-        schem.set_block(x, 0, 0, material);
-    }
-    
-    // Build along depth
-    for (let z = 1; z < depth; z++) {
-        schem.set_block(0, 0, z, material);
-    }
-    
-    return { schematic: schem };
-}
-`;
 
-// ============================================================================
-// Save As Node Dialog
-// ============================================================================
 
-interface SaveAsNodeDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (name: string, category: string) => void;
-  validationError?: string;
-}
-
-function SaveAsNodeDialog({ isOpen, onClose, onSave, validationError }: SaveAsNodeDialogProps) {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('Custom');
-  
-  if (!isOpen) return null;
-  
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl w-96 p-6">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Save className="w-5 h-5 text-indigo-400" />
-          Save as Reusable Node
-        </h2>
-        
-        {validationError && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-            {validationError}
-          </div>
-        )}
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-neutral-400 mb-1">Node Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Custom Node"
-              className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm text-neutral-400 mb-1">Category</label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Custom"
-              className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-        
-        <div className="flex justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onSave(name, category)}
-            disabled={!name.trim()}
-            className="px-4 py-2 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Save Node
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================================
 // Main Toolbar Component
 // ============================================================================
 
-interface ToolbarProps {
-  isMobile?: boolean;
-  onNodeAdded?: () => void;
-}
-
-export function Toolbar() {
+export function Toolbar(_props: { isMobile?: boolean; onNodeAdded?: () => void } = {}) {
   const addNode = useFlowStore((state) => state.addNode);
   const savedSubflows = useFlowStore((state) => state.savedSubflows);
   const deleteSubflow = useFlowStore((state) => state.deleteSubflow);
+  const saveAsSubflow = useFlowStore((state) => state.saveAsSubflow);
+  const flowName = useFlowStore((state) => state.flowName);
   
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['Logic', 'Inputs', 'Outputs', 'Subflows']);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [subflowName, setSubflowName] = useState('');
+  const [subflowCategory, setSubflowCategory] = useState('Custom');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const subflowsByCategory = useMemo(() => {
     const groups: Record<string, SavedSubflow[]> = {};
@@ -295,9 +187,6 @@ export function Toolbar() {
   const handleAddSubflow = useCallback((subflow: SavedSubflow) => {
     const id = `subflow-${crypto.randomUUID().slice(0, 8)}`;
     
-    // Extract config from the saved flow
-    const subflowConfig = extractSubflowConfig(subflow.flow);
-    
     const newNode: FlowNode = {
       id,
       type: 'subflow',
@@ -305,11 +194,28 @@ export function Toolbar() {
       data: { 
         label: subflow.name,
         flowId: subflow.id,
-        subflowConfig
+        subflowConfig: subflow.config
       },
     };
     addNode(newNode);
   }, [addNode]);
+
+  const handleSaveAsSubflow = useCallback(() => {
+    if (!subflowName.trim()) {
+      setSaveError('Please enter a name');
+      return;
+    }
+    
+    const result = saveAsSubflow(subflowName.trim(), subflowCategory);
+    if (result) {
+      setShowSaveDialog(false);
+      setSubflowName('');
+      setSubflowCategory('Custom');
+      setSaveError(null);
+    } else {
+      setSaveError('Flow must have at least one input and one output node to be saved as a subflow');
+    }
+  }, [subflowName, subflowCategory, saveAsSubflow]);
 
   const onDragStart = (event: React.DragEvent, nodeType: string, template?: NodeTemplate, subflow?: SavedSubflow) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -322,11 +228,10 @@ export function Toolbar() {
         ...template.config
       }));
     } else if (subflow) {
-      const subflowConfig = extractSubflowConfig(subflow.flow);
       event.dataTransfer.setData('application/reactflow-data', JSON.stringify({
         label: subflow.name,
         flowId: subflow.id,
-        subflowConfig
+        subflowConfig: subflow.config
       }));
     }
     
@@ -479,17 +384,100 @@ export function Toolbar() {
       </div>
       
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-neutral-800/50 bg-neutral-900/50">
-        {savedSubflows.length === 0 ? (
-          <p className="text-[10px] text-neutral-500">
-            Save a flow with inputs & outputs to create reusable nodes
-          </p>
-        ) : (
-          <p className="text-[10px] text-neutral-500">
-            {savedSubflows.length} custom node{savedSubflows.length !== 1 ? 's' : ''} available
-          </p>
-        )}
+      <div className="px-4 py-3 border-t border-neutral-800/50 bg-neutral-900/50 space-y-2">
+        <button
+          onClick={() => {
+            setSubflowName(flowName || 'My Subflow');
+            setShowSaveDialog(true);
+            setSaveError(null);
+          }}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Save as Subflow
+        </button>
+        <p className="text-[10px] text-neutral-500 text-center">
+          {savedSubflows.length === 0 
+            ? 'Create reusable nodes from flows'
+            : `${savedSubflows.length} custom node${savedSubflows.length !== 1 ? 's' : ''} available`
+          }
+        </p>
       </div>
+
+      {/* Save as Subflow Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl w-96 max-w-[90vw] animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <Workflow className="w-4 h-4 text-indigo-400" />
+                Save as Subflow
+              </h3>
+              <button
+                onClick={() => setShowSaveDialog(false)}
+                className="p-1 hover:bg-neutral-800 rounded text-neutral-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={subflowName}
+                  onChange={(e) => setSubflowName(e.target.value)}
+                  placeholder="My Subflow"
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveAsSubflow();
+                    if (e.key === 'Escape') setShowSaveDialog(false);
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Category</label>
+                <input
+                  type="text"
+                  value={subflowCategory}
+                  onChange={(e) => setSubflowCategory(e.target.value)}
+                  placeholder="Custom"
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+              
+              {saveError && (
+                <p className="text-sm text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">
+                  {saveError}
+                </p>
+              )}
+              
+              <p className="text-xs text-neutral-500">
+                The flow must have at least one input node and one output node to be saved as a reusable subflow.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-neutral-800">
+              <button
+                onClick={() => setShowSaveDialog(false)}
+                className="px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAsSubflow}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

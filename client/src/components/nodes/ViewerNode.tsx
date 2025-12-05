@@ -387,7 +387,7 @@ function TablePreview({ value }: { value: TabularData | DataValue }) {
         </tbody>
       </table>
       <div className="text-[10px] text-neutral-500 mt-2 px-1">
-        {value.metadata?.rowCount ?? rows.length} rows × {value.metadata?.columnCount ?? headers.length} columns
+        {String(value.metadata?.rowCount ?? rows.length)} rows × {String(value.metadata?.columnCount ?? headers.length)} columns
         {value.format && ` • ${value.format}`}
       </div>
     </div>

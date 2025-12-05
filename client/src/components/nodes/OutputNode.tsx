@@ -131,13 +131,22 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [tempLabel, setTempLabel] = useState(data.label || '');
 
-  // Get input data from connected node
+  // Get input data - prefer our own cache (contains serialized data) over source cache
   const inputEdge = edges.find(e => e.target === id);
+  const ownCache = nodeCache[id];
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
   
-  // Get the actual value from the source output
+  // Get the actual value - prefer our own cache (set by Editor with serialized data)
   let inputValue: unknown = null;
-  if (sourceCache?.output) {
+  
+  // First try our own cache - this has the serialized SchematicData
+  if (ownCache?.status === 'completed' && ownCache?.output) {
+    const output = ownCache.output as Record<string, unknown>;
+    inputValue = output['default'] ?? output['output'] ?? output[Object.keys(output)[0]];
+  }
+  
+  // Fall back to source cache if we don't have our own data
+  if (inputValue === null && sourceCache?.output) {
     const output = sourceCache.output as Record<string, unknown>;
     // Try to get value by handle name, then default, then first key
     const handleKey = inputEdge?.sourceHandle || 'default';
@@ -155,7 +164,7 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
     }
   }
   
-  const hasInput = inputEdge && sourceCache?.status === 'completed' && inputValue !== null;
+  const hasInput = (ownCache?.status === 'completed' || (inputEdge && sourceCache?.status === 'completed')) && inputValue !== null;
   const colors = getDataColor(inputValue);
   const Icon = getDataIcon(inputValue);
   const showDownload = data.allowDownload !== false && hasInput && canDownload(inputValue);
@@ -179,7 +188,20 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
         if (dataValue.data instanceof Uint8Array) {
           blob = new Blob([dataValue.data], { type: getMimeType(dataValue.format) });
         } else if (typeof dataValue.data === 'string') {
-          blob = new Blob([dataValue.data], { type: getMimeType(dataValue.format) });
+          // Check if it's base64-encoded binary data (common for schematics)
+          const isBinaryFormat = ['litematic', 'schematic', 'schem', 'nbt', 'binary'].includes(dataValue.format);
+          if (isBinaryFormat) {
+            // Decode base64 to binary
+            const binaryString = atob(dataValue.data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            blob = new Blob([bytes], { type: getMimeType(dataValue.format) });
+          } else {
+            // Text data - use as-is
+            blob = new Blob([dataValue.data], { type: getMimeType(dataValue.format) });
+          }
         } else {
           throw new Error('Unsupported data type');
         }
