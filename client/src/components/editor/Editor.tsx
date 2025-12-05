@@ -330,6 +330,91 @@ export function Editor() {
     return sorted;
   }, []);
 
+  /**
+   * Find code chains - groups of sequential code nodes that can be executed
+   * together in the worker without crossing the boundary.
+   * 
+   * IMPORTANT: A node can only be part of a chain if it EXCLUSIVELY outputs to
+   * other code nodes. If a node outputs to ANY non-code node (viewer, output, etc.),
+   * it must serialize its output and cannot be an intermediate chain node.
+   */
+  const findCodeChains = useCallback((nodes: FlowNode[], edges: Edge[]): Map<string, string[]> => {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const chains = new Map<string, string[]>(); // chainId -> [nodeIds in order]
+    const nodeToChain = new Map<string, string>(); // nodeId -> chainId
+    
+    // Get downstream nodes for each node
+    const getDownstreamNodes = (nodeId: string): FlowNode[] => {
+      return edges
+        .filter(e => e.source === nodeId)
+        .map(e => nodeMap.get(e.target))
+        .filter((n): n is FlowNode => n !== undefined);
+    };
+    
+    // Get upstream code nodes for a node
+    const getUpstreamCodeNodes = (nodeId: string): FlowNode[] => {
+      return edges
+        .filter(e => e.target === nodeId)
+        .map(e => nodeMap.get(e.source))
+        .filter((n): n is FlowNode => n !== undefined && n.type === 'code');
+    };
+    
+    // Check if a code node EXCLUSIVELY outputs to code nodes (can stay in worker)
+    // Returns false if ANY downstream is a non-code node
+    const canStayInWorker = (nodeId: string): boolean => {
+      const downstream = getDownstreamNodes(nodeId);
+      // If no downstream nodes, it needs to serialize (it's a terminal output)
+      if (downstream.length === 0) return false;
+      // Only stay in worker if ALL downstream nodes are code nodes
+      // If even ONE downstream is a viewer/output, we must serialize
+      return downstream.every(n => n.type === 'code');
+    };
+    
+    // Build chains starting from code nodes that have no upstream code nodes
+    // or whose upstream code nodes output to non-code nodes too
+    const codeNodes = nodes.filter(n => n.type === 'code');
+    
+    for (const node of codeNodes) {
+      if (nodeToChain.has(node.id)) continue;
+      
+      // Check if this node starts a new chain
+      const upstreamCode = getUpstreamCodeNodes(node.id);
+      const isChainStart = upstreamCode.length === 0 || 
+        upstreamCode.every(u => !canStayInWorker(u.id));
+      
+      if (!isChainStart) continue;
+      
+      // Build the chain forward from this node
+      const chainId = node.id;
+      const chain: string[] = [node.id];
+      nodeToChain.set(node.id, chainId);
+      
+      // Follow the chain while nodes EXCLUSIVELY output to code nodes
+      let current = node;
+      while (canStayInWorker(current.id)) {
+        const downstream = getDownstreamNodes(current.id);
+        const nextCodeNode = downstream.find(n => n.type === 'code' && !nodeToChain.has(n.id));
+        if (!nextCodeNode) break;
+        
+        chain.push(nextCodeNode.id);
+        nodeToChain.set(nextCodeNode.id, chainId);
+        current = nextCodeNode;
+      }
+      
+      chains.set(chainId, chain);
+    }
+    
+    // Handle any remaining code nodes that weren't part of a chain
+    for (const node of codeNodes) {
+      if (!nodeToChain.has(node.id)) {
+        chains.set(node.id, [node.id]);
+        nodeToChain.set(node.id, node.id);
+      }
+    }
+    
+    return chains;
+  }, []);
+
   const handleQuickRun = useCallback(async () => {
     setIsExecuting(true);
     clearExecutionLogs();
@@ -351,13 +436,29 @@ export function Editor() {
         return;
       }
 
+      // Find code chains for batched execution
+      const codeChains = findCodeChains(nodes, edges);
+      const executedChains = new Set<string>();
+      
+      // Build a map of node -> chain for quick lookup
+      const nodeToChain = new Map<string, string>();
+      for (const [chainId, nodeIds] of codeChains) {
+        for (const nodeId of nodeIds) {
+          nodeToChain.set(nodeId, chainId);
+        }
+      }
+
       // Mark all nodes as pending
       for (const node of nodes) {
         setNodeExecutionStatus(node.id, 'pending');
       }
 
+      console.log(`[Execution] Execution order:`, executionOrder.map(n => `${n.id}(${n.type})`));
+
       // Process nodes in topological order
       for (const node of executionOrder) {
+        console.log(`[Execution] Processing node: ${node.id} type: ${node.type}`);
+        
         // Handle input nodes - they just output their value
         if (node.type?.includes('input') && !node.type?.includes('schematic')) {
           const output = { default: node.data.value };
@@ -366,8 +467,154 @@ export function Editor() {
           continue;
         }
 
-        // Handle code nodes
+        // Handle code nodes - execute as chain if part of multi-node chain
         if (node.type === 'code') {
+          const chainId = nodeToChain.get(node.id);
+          
+          // Skip if we already executed this chain
+          if (chainId && executedChains.has(chainId)) {
+            continue;
+          }
+          
+          const chain = chainId ? codeChains.get(chainId) || [node.id] : [node.id];
+          console.log(`[Chain] Processing node ${node.id}, chain:`, chain);
+          
+          // TEMPORARILY DISABLED: Chain batching has issues when intermediate nodes 
+          // have cached outputs that get reused. Execute all nodes individually for now.
+          // TODO: Re-enable chain batching with proper cache invalidation
+          const useChainBatching = false;
+          
+          if (useChainBatching && chain.length > 1) {
+            // Execute entire chain as subflow (keeps data in worker)
+            executedChains.add(chainId!);
+            console.log(`[Chain] Executing multi-node chain:`, chain);
+            
+            addExecutionLog(`Executing code chain (${chain.length} nodes) in worker...`);
+            
+            // Mark all chain nodes as running
+            for (const nodeId of chain) {
+              setNodeExecutionStatus(nodeId, 'running');
+            }
+            setExecutingNodeId(chain[0]);
+            
+            // Gather chain nodes
+            const chainNodeSet = new Set(chain);
+            const chainNodes = nodes.filter(n => chainNodeSet.has(n.id));
+            
+            // Also include input nodes that feed into the chain
+            const inputNodeIds = new Set<string>();
+            for (const nodeId of chain) {
+              const incomingEdges = edges.filter(e => e.target === nodeId && !chainNodeSet.has(e.source));
+              for (const edge of incomingEdges) {
+                const sourceNode = nodes.find(n => n.id === edge.source);
+                if (sourceNode && (sourceNode.type?.includes('input') || sourceNode.type === 'code')) {
+                  inputNodeIds.add(edge.source);
+                }
+              }
+            }
+            
+            // Add input nodes to the subflow
+            const inputNodes = nodes.filter(n => inputNodeIds.has(n.id));
+            const allSubflowNodes = [...inputNodes, ...chainNodes];
+            const allSubflowEdges = edges.filter(e => 
+              (chainNodeSet.has(e.target) && (chainNodeSet.has(e.source) || inputNodeIds.has(e.source)))
+            );
+            
+            // Gather external inputs for the subflow
+            const subflowInputs: Record<string, unknown> = {};
+            for (const inputNodeId of inputNodeIds) {
+              const cached = nodeOutputs.get(inputNodeId);
+              if (cached) {
+                // Pass the entire output object
+                subflowInputs[inputNodeId] = cached.default ?? cached;
+              }
+            }
+            
+            // The output node is the last code node in the chain
+            const outputNodeId = chain[chain.length - 1];
+            
+            console.log(`[Chain] Subflow details:`, {
+              chainNodes: chainNodes.map(n => n.id),
+              inputNodes: inputNodes.map(n => n.id),
+              allSubflowNodes: allSubflowNodes.map(n => n.id),
+              allSubflowEdges: allSubflowEdges.map(e => `${e.source}->${e.target}`),
+              subflowInputs: Object.keys(subflowInputs),
+              outputNodeId
+            });
+            
+            try {
+              const startTime = Date.now();
+              const result = await executeSubflow(
+                allSubflowNodes.map(n => ({
+                  id: n.id,
+                  type: n.type || 'unknown',
+                  data: { code: n.data.code, value: n.data.value, label: n.data.label }
+                })),
+                allSubflowEdges.map(e => ({
+                  id: e.id,
+                  source: e.source,
+                  target: e.target,
+                  sourceHandle: e.sourceHandle,
+                  targetHandle: e.targetHandle
+                })),
+                subflowInputs,
+                [outputNodeId]
+              );
+              
+              const executionTime = Date.now() - startTime;
+              
+              console.log(`[Chain] Subflow result:`, {
+                success: result.success,
+                outputKeys: Object.keys(result.outputs || {}),
+                schematicKeys: result.schematics ? Object.keys(result.schematics) : [],
+                error: result.error
+              });
+              
+              if (!result.success) {
+                throw new Error(result.error?.message || 'Chain execution failed');
+              }
+              
+              // Process results - mark intermediate nodes as completed (no serialized output)
+              for (let i = 0; i < chain.length - 1; i++) {
+                const nodeId = chain[i];
+                const nodeLabel = nodes.find(n => n.id === nodeId)?.data.label || nodeId;
+                // Intermediate nodes kept data in worker - mark with special indicator
+                setNodeExecutionStatus(nodeId, 'completed', { _workerInternal: true });
+                addExecutionLog(`[OK] "${nodeLabel}" (in-worker)`);
+              }
+              
+              // Final node gets the serialized output
+              let finalResult: Record<string, unknown> = {};
+              if (result.schematics && Object.keys(result.schematics).length > 0) {
+                for (const [key, value] of Object.entries(result.schematics)) {
+                  if (value) finalResult[key] = value;
+                }
+              } else {
+                finalResult = result.outputs;
+              }
+              
+              if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
+              }
+              
+              nodeOutputs.set(outputNodeId, finalResult);
+              const lastNodeLabel = nodes.find(n => n.id === outputNodeId)?.data.label || outputNodeId;
+              setNodeExecutionStatus(outputNodeId, 'completed', finalResult, undefined, executionTime);
+              addExecutionLog(`[OK] "${lastNodeLabel}" completed chain in ${executionTime}ms`);
+              
+            } catch (err) {
+              const error = err as Error;
+              for (const nodeId of chain) {
+                setNodeExecutionStatus(nodeId, 'error', undefined, parseExecutionError(error));
+              }
+              addExecutionLog(`[ERROR] Chain execution: ${error.message}`);
+              break;
+            }
+            
+            continue;
+          }
+          
+          // Single code node - execute normally (will serialize)
           const code = node.data.code;
           
           if (!code) {
@@ -377,6 +624,7 @@ export function Editor() {
           }
 
           // Gather inputs from connected upstream nodes
+          // For code nodes, prefer handles (_schematicHandle) over serialized data
           const inputValues: Record<string, unknown> = {};
           const incomingEdges = edges.filter(e => e.target === node.id);
           
@@ -403,49 +651,59 @@ export function Editor() {
                 }
               }
               
+              // Value is either a handle { _schematicHandle: "..." } or primitive data
+              // The worker will resolve handles back to WASM objects
               console.log('Mapping input:', inputName, '=', value);
               inputValues[inputName] = value;
             }
           }
 
+          // Always use handles - keeps data in worker, avoids serialization
+          // Viewers will fetch serialized data on-demand using the handle
+          const returnHandles = true;
+
           // Mark as running
           setExecutingNodeId(node.id);
           setNodeExecutionStatus(node.id, 'running');
-          addExecutionLog(`Executing "${node.data.label || 'Code'}"...`);
+          const nodeLabel = node.data.label || 'Code';
+          addExecutionLog(`Executing "${nodeLabel}"...`);
 
           // Execute with timing
           const startTime = Date.now();
-          const result = await executeScript(code, inputValues);
+          const result = await executeScript(code, inputValues, { returnHandles });
           const executionTime = Date.now() - startTime;
 
           if (result.success) {
-            // Build final result with binary schematic data
-            let finalResult: Record<string, unknown>;
+            // Build final result - always store handles
+            let finalResult: Record<string, unknown> = {};
             
             console.log('Execution result:', { 
               result: result.result, 
               schematics: result.schematics,
-              schematicKeys: result.schematics ? Object.keys(result.schematics) : []
+              schematicHandles: result.schematicHandles,
+              returnHandles
             });
             
-            if (result.schematics && Object.keys(result.schematics).length > 0) {
-              // Build result using schematics (which have been serialized for transfer)
-              finalResult = {};
+            if (returnHandles && result.schematicHandles && Object.keys(result.schematicHandles).length > 0) {
+              // Store handles - downstream code nodes will use these
+              for (const [key, handleId] of Object.entries(result.schematicHandles)) {
+                finalResult[key] = { _schematicHandle: handleId };
+              }
               
-              // Add all schematics to the result
+              if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
+              }
+            } else if (result.schematics && Object.keys(result.schematics).length > 0) {
+              // Store serialized data - viewers will use this directly
               for (const [key, value] of Object.entries(result.schematics)) {
                 if (value) {
                   finalResult[key] = value;
                 }
               }
               
-              // Also add 'default' pointing to first schematic if there's only one
               if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
-                const firstKey = Object.keys(finalResult)[0];
-                finalResult['default'] = finalResult[firstKey];
+                finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
               }
-              const name = node.data.label || node.id;
-              console.log(`Final result with schematics for node "${name}":`, finalResult);
             } else {
               finalResult = result.result || {};
             }
@@ -467,9 +725,12 @@ export function Editor() {
 
         // Handle viewer nodes - they receive data and can pass it through
         if (node.type === 'viewer') {
+          console.log(`[Viewer] Processing viewer node: ${node.id}`);
           const incomingEdge = edges.find(e => e.target === node.id);
+          console.log(`[Viewer] Incoming edge:`, incomingEdge);
           if (incomingEdge) {
             const sourceOutput = nodeOutputs.get(incomingEdge.source);
+            console.log(`[Viewer] Source output from ${incomingEdge.source}:`, sourceOutput);
             if (sourceOutput) {
               // Unwrap to get the actual value - prefer sourceHandle, then 'default', then first key
               const handleKey = incomingEdge.sourceHandle || 'default';
@@ -486,14 +747,42 @@ export function Editor() {
                 }
               }
               
+              // For viewers: if we have a handle, fetch serialized data from worker
+              if (viewerValue && typeof viewerValue === 'object' && '_schematicHandle' in viewerValue) {
+                const handleObj = viewerValue as { _schematicHandle: string };
+                const handleId = handleObj._schematicHandle;
+                console.log(`[Viewer] Fetching serialized data for handle: ${handleId}, workerClient:`, !!workerClient);
+                
+                if (workerClient) {
+                  try {
+                    const serializedData = await workerClient.getData(handleId);
+                    console.log(`[Viewer] getData returned:`, serializedData);
+                    if (serializedData) {
+                      viewerValue = serializedData;
+                      console.log(`[Viewer] Got serialized data, format:`, (serializedData as any).format);
+                    } else {
+                      console.warn(`[Viewer] No data returned for handle ${handleId}`);
+                    }
+                  } catch (err) {
+                    console.error(`[Viewer] Failed to fetch data for handle ${handleId}:`, err);
+                  }
+                } else {
+                  console.warn(`[Viewer] workerClient is null, cannot fetch data`);
+                }
+              } else {
+                console.log(`[Viewer] viewerValue is not a handle:`, viewerValue);
+              }
+              
               // Set the viewer's cache with the unwrapped value
               setNodeExecutionStatus(node.id, 'completed', { default: viewerValue });
               
               // If passthrough is enabled, make output available to downstream nodes
+              // Pass through the ORIGINAL value (handle) so downstream code nodes can use it
               const viewerData = node.data as { passthrough?: boolean };
               if (viewerData.passthrough) {
-                // Store output for downstream nodes - wrap in 'output' key for the output handle
-                nodeOutputs.set(node.id, { output: viewerValue, default: viewerValue });
+                // Get the original source output (with handle) for passthrough
+                const originalValue = sourceOutput[incomingEdge.sourceHandle || 'default'] || sourceOutput['default'];
+                nodeOutputs.set(node.id, { output: originalValue, default: originalValue });
               }
             }
           }
@@ -517,6 +806,23 @@ export function Editor() {
                 const keys = Object.keys(sourceOutput);
                 if (keys.length === 1) {
                   outputValue = sourceOutput[keys[0]];
+                }
+              }
+              
+              // For output nodes: if we have a handle, fetch serialized data from worker
+              if (outputValue && typeof outputValue === 'object' && '_schematicHandle' in outputValue) {
+                const handleObj = outputValue as { _schematicHandle: string };
+                const handleId = handleObj._schematicHandle;
+                
+                if (workerClient) {
+                  try {
+                    const serializedData = await workerClient.getData(handleId);
+                    if (serializedData) {
+                      outputValue = serializedData;
+                    }
+                  } catch (err) {
+                    console.error(`Failed to fetch data for handle ${handleId}:`, err);
+                  }
                 }
               }
               
@@ -642,7 +948,7 @@ export function Editor() {
       setIsExecuting(false);
       setExecutingNodeId(null);
     }
-  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, executeSubflow, getExecutionOrder]);
+  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, executeSubflow, getExecutionOrder, findCodeChains]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstance.current = instance;

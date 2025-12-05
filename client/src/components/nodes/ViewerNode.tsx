@@ -452,12 +452,18 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   
   const isResized = !!(width && height);
   
-  // Get input data from cache
+  // Get input data - prefer viewer's own cache (which has serialized data), fall back to source
   const inputEdge = edges.find(e => e.target === id);
+  const viewerCache = nodeCache[id];
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
-  const rawOutput = sourceCache?.output;
-  const hasInput = inputEdge && sourceCache?.status === 'completed';
-  const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending';
+  
+  // Use viewer's own output if it has been executed (contains serialized data)
+  // Otherwise fall back to source cache (for passthrough display before execution)
+  const rawOutput = viewerCache?.status === 'completed' && viewerCache?.output 
+    ? viewerCache.output 
+    : sourceCache?.output;
+  const hasInput = inputEdge && (viewerCache?.status === 'completed' || sourceCache?.status === 'completed');
+  const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending' || viewerCache?.status === 'running';
   
   // Unwrap and process the value
   const inputValue = useMemo(() => unwrapValue(rawOutput), [rawOutput]);

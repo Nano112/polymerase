@@ -165,18 +165,33 @@ export class WorkerDataStore {
    */
   serialize(handleId: string, _options: SerializeOptions = {}): DataValue | null {
     const stored = this.dataMap.get(handleId);
-    if (!stored) return null;
+    if (!stored) {
+      console.warn(`[WorkerDataStore] Handle not found: ${handleId}`);
+      return null;
+    }
 
     stored.lastAccess = Date.now();
     const { value, handle } = stored;
 
     // Handle different data types
-    // For SchematicWrapper, call its serialize method
+    // For SchematicWrapper, call its to_schematic method
     if (this.isSchematicWrapper(value)) {
       const wrapper = value as SchematicWrapperLike;
+      let data: Uint8Array | string;
+      
+      // Try different serialization methods
+      if (typeof wrapper.to_schematic === 'function') {
+        data = wrapper.to_schematic();
+      } else if (typeof wrapper.serialize === 'function') {
+        data = wrapper.serialize();
+      } else {
+        data = this.extractData(value);
+      }
+      
+      console.log(`[WorkerDataStore] Serialized schematic, size: ${typeof data === 'string' ? data.length : data.byteLength} bytes`);
       return {
         format: handle.format,
-        data: wrapper.serialize ? wrapper.serialize() : this.extractData(value),
+        data,
         metadata: handle.metadata,
         handleId,
       };
@@ -285,7 +300,8 @@ export class WorkerDataStore {
   private isSchematicWrapper(value: unknown): boolean {
     if (!value || typeof value !== 'object') return false;
     const obj = value as Record<string, unknown>;
-    return typeof obj.serialize === 'function' || 
+    return typeof obj.to_schematic === 'function' ||
+           typeof obj.serialize === 'function' || 
            typeof obj.get_block === 'function' ||
            typeof obj.set_block === 'function';
   }
@@ -326,6 +342,7 @@ export class WorkerDataStore {
  * Interface for SchematicWrapper-like objects
  */
 interface SchematicWrapperLike {
+  to_schematic?: () => Uint8Array;
   serialize?: () => Uint8Array;
   get_block?: (x: number, y: number, z: number) => string;
   set_block?: (x: number, y: number, z: number, block: string) => void;

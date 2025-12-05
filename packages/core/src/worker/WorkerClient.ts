@@ -219,7 +219,7 @@ export class WorkerClient {
   async executeScript(
     code: string,
     inputs: Record<string, unknown> = {},
-    options: { timeout?: number } = {}
+    options: { timeout?: number; returnHandles?: boolean } = {}
   ): Promise<ExecutionResult> {
     if (this.state !== WORKER_STATES.READY) {
       throw new Error(`Worker not ready. Current state: ${this.state}`);
@@ -234,6 +234,7 @@ export class WorkerClient {
         inputs,
         options: {
           timeout: options.timeout || 60000,
+          returnHandles: options.returnHandles,
         },
       }) as ExecutionResult;
 

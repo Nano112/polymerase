@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { WorkerClient, type SubflowResult } from '@polymerase/core/worker';
 // @ts-ignore - Import worker directly from source
 import Worker from '../../../packages/core/src/worker/browser.worker.ts?worker';
@@ -20,6 +20,7 @@ interface SubflowEdge {
 
 export function useLocalExecutor() {
   const workerClientRef = useRef<WorkerClient | null>(null);
+  const [workerClient, setWorkerClient] = useState<WorkerClient | null>(null);
   const { addExecutionLog } = useFlowStore();
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export function useLocalExecutor() {
     const worker = new Worker();
     const client = new WorkerClient({ worker });
     workerClientRef.current = client;
+    setWorkerClient(client);
 
     // Set up event listeners
     client.on('progress', (payload: any) => {
@@ -60,14 +62,22 @@ export function useLocalExecutor() {
     return () => {
       client.destroy();
       workerClientRef.current = null;
+      setWorkerClient(null);
     };
   }, [addExecutionLog]);
 
-  const executeScript = useCallback(async (code: string, inputs: Record<string, unknown>) => {
+  const executeScript = useCallback(async (
+    code: string, 
+    inputs: Record<string, unknown>,
+    options: { returnHandles?: boolean } = {}
+  ) => {
     if (!workerClientRef.current) {
       throw new Error('Worker client not initialized');
     }
-    return workerClientRef.current.executeScript(code, inputs, { timeout: 60000 });
+    return workerClientRef.current.executeScript(code, inputs, { 
+      timeout: 60000,
+      returnHandles: options.returnHandles 
+    });
   }, []);
 
   /**
@@ -86,5 +96,5 @@ export function useLocalExecutor() {
     return workerClientRef.current.executeSubflow(nodes, edges, inputs, outputNodeIds, { timeout: 60000 });
   }, []);
 
-  return { executeScript, executeSubflow, workerClient: workerClientRef.current };
+  return { executeScript, executeSubflow, workerClient };
 }

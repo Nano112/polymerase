@@ -24,9 +24,23 @@ interface DataEdgeProps extends EdgeProps {
 /**
  * Get a human-readable description of the data type
  */
-function getDataTypeLabel(value: unknown): { type: string; serialized: boolean; size?: string } {
+function getDataTypeLabel(value: unknown): { type: string; serialized: boolean; inWorker?: boolean; size?: string } {
   if (value === null || value === undefined) {
     return { type: 'null', serialized: false };
+  }
+  
+  // Check for worker-internal marker (data stayed in worker, not serialized)
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if ('_workerInternal' in obj && obj._workerInternal === true) {
+      return { type: 'in-worker', serialized: false, inWorker: true };
+    }
+    
+    // Check for schematic handle (data stored in worker, only handle in main thread)
+    if ('_schematicHandle' in obj && typeof obj._schematicHandle === 'string') {
+      const handleId = obj._schematicHandle;
+      return { type: `handle: ${handleId.slice(0, 8)}...`, serialized: false, inWorker: true };
+    }
   }
   
   // Check for serialized data types (crossed worker boundary)
@@ -49,7 +63,7 @@ function getDataTypeLabel(value: unknown): { type: string; serialized: boolean; 
   if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
     if ('__wbg_ptr' in obj || typeof obj.to_schematic === 'function') {
-      return { type: 'schematic (WASM)', serialized: false };
+      return { type: 'schematic (WASM)', serialized: false, inWorker: true };
     }
   }
   
@@ -72,6 +86,14 @@ function getDataTypeLabel(value: unknown): { type: string; serialized: boolean; 
 function getDataPreview(value: unknown, maxLength = 50): string {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
+  
+  // Worker internal marker - data stayed in worker
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if ('_workerInternal' in obj && obj._workerInternal === true) {
+      return '⚡ Data in worker (not serialized)';
+    }
+  }
   
   if (isSchematicData(value)) {
     const meta = (value as { metadata?: { name?: string } }).metadata;
@@ -247,10 +269,12 @@ const DataEdge = memo(({
               flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono
               border border-neutral-700 bg-neutral-900/95 backdrop-blur-sm
               hover:border-neutral-500 transition-colors
-              ${dataInfo.serialized ? 'text-cyan-400' : 'text-green-400'}
+              ${dataInfo.serialized ? 'text-cyan-400' : dataInfo.inWorker ? 'text-purple-400' : 'text-green-400'}
             `}>
               {dataInfo.serialized ? (
                 <Database className="w-2.5 h-2.5" />
+              ) : dataInfo.inWorker ? (
+                <Zap className="w-2.5 h-2.5 text-purple-400" />
               ) : (
                 <Zap className="w-2.5 h-2.5" />
               )}
@@ -286,15 +310,20 @@ const DataEdge = memo(({
               <div className="space-y-1.5 text-[10px]">
                 <div className="flex items-center gap-2">
                   <span className="text-neutral-500">Type:</span>
-                  <span className={dataInfo?.serialized ? 'text-cyan-400' : 'text-green-400'}>
+                  <span className={dataInfo?.serialized ? 'text-cyan-400' : dataInfo?.inWorker ? 'text-purple-400' : 'text-green-400'}>
                     {dataInfo?.type}
                   </span>
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <span className="text-neutral-500">Serialized:</span>
-                  <span className={dataInfo?.serialized ? 'text-cyan-400' : 'text-yellow-400'}>
-                    {dataInfo?.serialized ? 'Yes (crossed boundary)' : 'No (in-memory)'}
+                  <span className="text-neutral-500">Location:</span>
+                  <span className={
+                    dataInfo?.inWorker ? 'text-purple-400' : 
+                    dataInfo?.serialized ? 'text-cyan-400' : 'text-green-400'
+                  }>
+                    {dataInfo?.inWorker ? '⚡ Worker (no serialization)' : 
+                     dataInfo?.serialized ? '📦 Serialized (crossed boundary)' : 
+                     '💾 Main thread'}
                   </span>
                 </div>
                 

@@ -153,6 +153,8 @@ export interface ExecutionResult {
   success: boolean;
   result?: Record<string, unknown>;
   schematics?: Record<string, SchematicData>;
+  /** Handles to schematics stored in worker (when returnHandles is true) */
+  schematicHandles?: Record<string, string>;
   hasSchematic?: boolean;
   executionTime?: number;
   error?: ExecutionError;
