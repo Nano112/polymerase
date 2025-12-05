@@ -116,11 +116,13 @@ function ExecutionErrorDisplay({ error }: { error: ExecutionError }) {
   );
 }
 
-export function CodePanel({ nodeId }: CodePanelProps) {
+export function CodePanel({ nodeId, onClose }: CodePanelProps) {
   const { nodes, updateNodeData, addNode, edges, setEdges, setNodeOutput, nodeCache } = useFlowStore();
   const [localCode, setLocalCode] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' });
+  const [showIO, setShowIO] = useState(false);
+  const [showTips, setShowTips] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const initialValidationDone = useRef(false);
   const lastValidatedCode = useRef<string>('');
@@ -367,25 +369,32 @@ export function CodePanel({ nodeId }: CodePanelProps) {
   }
 
   return (
-    <div className="flex flex-col h-[70vh]">
+    <div className="flex flex-col h-full sm:h-[80vh]">
       {/* Header info */}
-      <div className="px-6 py-4 border-b border-neutral-800/50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-500/10 border border-green-500/20">
-            <Zap className="w-5 h-5 text-green-400" />
+      <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-neutral-800/50 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between bg-neutral-900/50">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-green-500/10 border border-green-500/20 shrink-0">
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <input
               type="text"
               value={node.data.label || ''}
               onChange={(e) => updateNodeData(nodeId, { label: e.target.value })}
-              className="bg-transparent text-white font-semibold focus:outline-none border-b border-transparent focus:border-neutral-600 text-lg"
+              className="bg-transparent text-white font-semibold focus:outline-none border-b border-transparent focus:border-neutral-600 text-base sm:text-lg w-full"
               placeholder="Node label..."
             />
           </div>
+          {/* Mobile Close Button - Visible only on mobile when header is stacked */}
+          <button
+            onClick={onClose}
+            className="sm:hidden p-2 -mr-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           {hasChanges && (
             <>
               <span className="text-xs text-amber-400 px-2 py-1 bg-amber-500/10 rounded border border-amber-500/20">
@@ -428,6 +437,17 @@ export function CodePanel({ nodeId }: CodePanelProps) {
               <XCircle className="w-3 h-3" />
               Invalid
             </span>
+          )}
+          
+          {/* Desktop Close Button */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="hidden sm:flex p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors ml-2"
+              title="Close"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
           )}
         </div>
       </div>
@@ -479,85 +499,116 @@ export function CodePanel({ nodeId }: CodePanelProps) {
 
       {/* IO Preview */}
       {validation.io && (
-        <div className="px-6 py-4 bg-neutral-900/50">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">IO Schema</h4>
-            {Object.keys(validation.io.inputs || {}).length > 0 && (
-              <button
-                onClick={createInputNodesFromIO}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 transition-colors border border-blue-500/30"
-              >
-                <Plus className="w-3 h-3" />
-                Create Input Nodes
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Inputs */}
-            <div>
-              <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Inputs</h4>
-              {Object.keys(validation.io.inputs || {}).length > 0 ? (
-                <div className="space-y-1">
-                  {Object.entries(validation.io.inputs).map(([key, config]) => (
-                    <div key={key} className="text-xs text-neutral-400 flex items-center gap-2 p-2 bg-neutral-800/50 rounded border border-neutral-700/50">
-                      <span className="font-mono text-blue-300">{key}</span>
-                      <span className="text-neutral-600">:</span>
-                      <span className="text-neutral-500">{config.type}</span>
-                      {'default' in config && (
-                        <span className="text-neutral-600 ml-auto">= {String(config.default)}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-neutral-600">No inputs defined</p>
-              )}
+        <div className="border-t border-neutral-800/50 bg-neutral-900/50">
+          <button 
+            onClick={() => setShowIO(!showIO)}
+            className="w-full px-4 py-2 flex items-center justify-between hover:bg-neutral-800/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">IO Schema</h4>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-800 text-neutral-500">
+                {Object.keys(validation.io.inputs || {}).length} in, {Object.keys(validation.io.outputs || {}).length} out
+              </span>
             </div>
+            {showIO ? <ChevronDown className="w-4 h-4 text-neutral-500" /> : <ChevronRight className="w-4 h-4 text-neutral-500" />}
+          </button>
+          
+          {showIO && (
+            <div className="px-4 pb-4 sm:px-6 sm:pb-4 animate-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-end mb-3">
+                {Object.keys(validation.io.inputs || {}).length > 0 && (
+                  <button
+                    onClick={createInputNodesFromIO}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 transition-colors border border-blue-500/30"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Create Input Nodes
+                  </button>
+                )}
+              </div>
 
-            {/* Outputs */}
-            <div>
-              <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">Outputs</h4>
-              {Object.keys(validation.io.outputs || {}).length > 0 ? (
-                <div className="space-y-1">
-                  {Object.entries(validation.io.outputs).map(([key, config]) => (
-                    <div key={key} className="text-xs text-neutral-400 flex items-center gap-2 p-2 bg-neutral-800/50 rounded border border-neutral-700/50">
-                      <span className="font-mono text-amber-300">{key}</span>
-                      <span className="text-neutral-600">:</span>
-                      <span className="text-neutral-500">{config.type}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Inputs */}
+                <div>
+                  <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Inputs</h4>
+                  {Object.keys(validation.io.inputs || {}).length > 0 ? (
+                    <div className="space-y-1">
+                      {Object.entries(validation.io.inputs).map(([key, config]) => (
+                        <div key={key} className="text-xs text-neutral-400 flex items-center gap-2 p-2 bg-neutral-800/50 rounded border border-neutral-700/50 overflow-hidden">
+                          <span className="font-mono text-blue-300 shrink-0">{key}</span>
+                          <span className="text-neutral-600">:</span>
+                          <span className="text-neutral-500 truncate">{config.type}</span>
+                          {'default' in config && (
+                            <span className="text-neutral-600 ml-auto shrink-0">= {String(config.default)}</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <p className="text-xs text-neutral-600">No inputs defined</p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-neutral-600">No outputs defined</p>
-              )}
+
+                {/* Outputs */}
+                <div>
+                  <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">Outputs</h4>
+                  {Object.keys(validation.io.outputs || {}).length > 0 ? (
+                    <div className="space-y-1">
+                      {Object.entries(validation.io.outputs).map(([key, config]) => (
+                        <div key={key} className="text-xs text-neutral-400 flex items-center gap-2 p-2 bg-neutral-800/50 rounded border border-neutral-700/50 overflow-hidden">
+                          <span className="font-mono text-amber-300 shrink-0">{key}</span>
+                          <span className="text-neutral-600">:</span>
+                          <span className="text-neutral-500 truncate">{config.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-neutral-600">No outputs defined</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Tips Section */}
-      <div className="p-4 bg-neutral-900/50 border-t border-neutral-800/50">
-        <div className="p-4 rounded-xl border border-green-500/20 bg-green-900/10">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-medium text-green-100">Script Format</span>
+      <div className="border-t border-neutral-800/50 bg-neutral-900/50">
+        <button 
+          onClick={() => setShowTips(!showTips)}
+          className="w-full px-4 py-2 flex items-center justify-between hover:bg-neutral-800/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-neutral-500" />
+            <span className="text-xs font-medium text-neutral-400">Tips & Reference</span>
           </div>
-          <div className="space-y-2 text-xs text-green-200/70">
-            <div className="flex items-start gap-2">
-              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
-              <span>Define IO with <code className="px-1 rounded bg-green-500/20 text-green-300">export const io = {'{ inputs: {}, outputs: {} }'}</code></span>
-            </div>
-            <div className="flex items-start gap-2">
-              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
-              <span>Export default function: <code className="px-1 rounded bg-green-500/20 text-green-300">export default async function(inputs, context)</code></span>
-            </div>
-            <div className="flex items-start gap-2">
-              <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
-              <span>Context provides: <code className="px-1 rounded bg-green-500/20 text-green-300">Schematic, Logger, Vec3, Noise, Math</code></span>
+          {showTips ? <ChevronDown className="w-4 h-4 text-neutral-500" /> : <ChevronRight className="w-4 h-4 text-neutral-500" />}
+        </button>
+        
+        {showTips && (
+          <div className="p-4 animate-in slide-in-from-top-2 duration-200">
+            <div className="p-4 rounded-xl border border-green-500/20 bg-green-900/10">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-medium text-green-100">Script Format</span>
+              </div>
+              <div className="space-y-2 text-xs text-green-200/70">
+                <div className="flex items-start gap-2">
+                  <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+                  <span>Define IO with <code className="px-1 rounded bg-green-500/20 text-green-300">export const io = {'{ inputs: {}, outputs: {} }'}</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+                  <span>Export default function: <code className="px-1 rounded bg-green-500/20 text-green-300">export default async function(inputs, context)</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <ArrowRight className="w-3 h-3 mt-0.5 text-green-400 flex-shrink-0" />
+                  <span>Context provides: <code className="px-1 rounded bg-green-500/20 text-green-300">Schematic, Logger, Vec3, Noise, Math</code></span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

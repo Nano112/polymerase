@@ -22,7 +22,6 @@ import {
   FolderOpen, 
   Play, 
   Settings,
-  Zap,
   Terminal,
   Code,
   RotateCcw,
@@ -1514,13 +1513,18 @@ export function Editor() {
           setShowCodeEditor(false);
           setEditingNodeId(null);
         }}
-        title="Code Editor"
-        subtitle="Edit your Synthase script"
-        icon={<Zap className="w-5 h-5" />}
-        iconColor="text-green-400"
         size={isMobile ? 'full' : 'xl'}
+        showCloseButton={false}
       >
-        {editingNodeId && <CodePanel nodeId={editingNodeId} />}
+        {editingNodeId && (
+          <CodePanel 
+            nodeId={editingNodeId} 
+            onClose={() => {
+              setShowCodeEditor(false);
+              setEditingNodeId(null);
+            }}
+          />
+        )}
       </Modal>
 
       {/* Node Properties Modal */}
