@@ -186,17 +186,21 @@ export class PolymeraseEngine {
         }
       }
 
-      // Collect final outputs (from nodes with no outgoing edges)
-      const outputNodeIds = new Set(flow.nodes.map(n => n.id));
-      for (const edge of flow.edges) {
-        outputNodeIds.delete(edge.source);
-      }
+      // Collect final outputs only from explicit output nodes (not viewers or other terminal nodes)
+      const outputNodes = flow.nodes.filter(n => 
+        n.type === 'output' || n.type === 'file_output' || n.type === 'schematic_output'
+      );
 
       const finalOutput: Record<string, unknown> = {};
-      for (const nodeId of outputNodeIds) {
-        const output = nodeOutputs.get(nodeId);
+      for (const node of outputNodes) {
+        const output = nodeOutputs.get(node.id);
         if (output) {
-          Object.assign(finalOutput, output);
+          // Use the node's label as the key, skip 'default' to avoid duplication
+          const label = node.data.label || 'output';
+          const value = output[label] ?? output['default'] ?? output[Object.keys(output)[0]];
+          if (value !== undefined && value !== null) {
+            finalOutput[label] = value;
+          }
         }
       }
 
@@ -276,14 +280,16 @@ export class PolymeraseEngine {
           break;
         }
 
+        case 'input':
         case 'static_input':
         case 'number_input':
         case 'text_input':
         case 'boolean_input': {
           // Input nodes just pass through their value
+          // Use 'output' as handle name to match the UI edge connections
           result = {
             success: true,
-            result: { default: node.data.value },
+            result: { output: node.data.value, default: node.data.value },
           };
           break;
         }
@@ -292,7 +298,7 @@ export class PolymeraseEngine {
           // Schematic input nodes provide schematic data
           result = {
             success: true,
-            result: { schematic: node.data.value },
+            result: { schematic: node.data.value, output: node.data.value },
           };
           break;
         }
@@ -302,6 +308,75 @@ export class PolymeraseEngine {
           nodeState.status = 'skipped';
           nodeState.endTime = Date.now();
           return nodeState;
+        }
+
+        case 'output': {
+          // Output nodes pass through their input data for final output collection
+          const inputConnections = getNodeInputs(node.id, edges);
+          const inputs: Record<string, unknown> = {};
+
+          for (const [handleId, connection] of inputConnections) {
+            const sourceOutput = nodeOutputs.get(connection.sourceId);
+            if (sourceOutput) {
+              const outputKey = connection.sourceHandle || 'default';
+              inputs[handleId] = sourceOutput[outputKey] ?? sourceOutput;
+            }
+          }
+
+          // Use the label as the output key
+          const outputKey = node.data.label || 'output';
+          const inputValue = inputs['default'] ?? inputs[Object.keys(inputs)[0]] ?? null;
+
+          result = {
+            success: true,
+            result: inputValue !== null ? { [outputKey]: inputValue } : {},
+          };
+          break;
+        }
+
+        case 'viewer': {
+          // Viewer nodes just pass through for display, not included in final output
+          const inputConnections = getNodeInputs(node.id, edges);
+          const inputs: Record<string, unknown> = {};
+
+          for (const [handleId, connection] of inputConnections) {
+            const sourceOutput = nodeOutputs.get(connection.sourceId);
+            if (sourceOutput) {
+              const outputKey = connection.sourceHandle || 'default';
+              inputs[handleId] = sourceOutput[outputKey] ?? sourceOutput;
+            }
+          }
+
+          const inputValue = inputs['default'] ?? inputs[Object.keys(inputs)[0]] ?? null;
+          result = {
+            success: true,
+            result: inputValue !== null ? { default: inputValue } : {},
+          };
+          break;
+        }
+
+        case 'file_output':
+        case 'schematic_output': {
+          // File/schematic output nodes pass through their input
+          const inputConnections = getNodeInputs(node.id, edges);
+          const inputs: Record<string, unknown> = {};
+
+          for (const [handleId, connection] of inputConnections) {
+            const sourceOutput = nodeOutputs.get(connection.sourceId);
+            if (sourceOutput) {
+              const outputKey = connection.sourceHandle || 'default';
+              inputs[handleId] = sourceOutput[outputKey] ?? sourceOutput;
+            }
+          }
+
+          const outputKey = node.data.label || (node.data as Record<string, unknown>).filename as string || 'output';
+          const inputValue = inputs['default'] ?? inputs['schematic'] ?? inputs[Object.keys(inputs)[0]] ?? null;
+
+          result = {
+            success: true,
+            result: inputValue !== null ? { [outputKey]: inputValue } : {},
+          };
+          break;
         }
 
         default: {

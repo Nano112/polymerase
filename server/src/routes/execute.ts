@@ -93,21 +93,61 @@ executeRouter.post('/', async (c) => {
       })
       .where(eq(executions.id, executionId));
 
-    // Save any generated schematics
+    // Save any generated schematics and build serializable outputs
+    const processedOutputs: Record<string, unknown> = {};
     if (result.finalOutput) {
       for (const [key, value] of Object.entries(result.finalOutput)) {
-        if (value instanceof Uint8Array || ArrayBuffer.isView(value)) {
+        // Check for schematic wrapper objects (WASM)
+        if (value && typeof value === 'object' && 'to_schematic' in value) {
+          const wrapper = value as { to_schematic: () => Uint8Array };
+          try {
+            const bytes = wrapper.to_schematic();
+            const schematicId = crypto.randomUUID();
+            const newSchematic: NewSchematic = {
+              id: schematicId,
+              name: key,
+              flowId: flow.id,
+              executionId,
+              format: 'schem',
+              data: Buffer.from(bytes).toString('base64'),
+              createdAt: new Date(),
+            };
+            await db.insert(schematics).values(newSchematic);
+            // Convert to SchematicData format for the response
+            processedOutputs[key] = {
+              format: 'schem',
+              data: Buffer.from(bytes).toString('base64'),
+              metadata: {
+                name: key,
+                fileSize: bytes.length,
+              },
+            };
+          } catch (err) {
+            console.error(`Failed to convert schematic "${key}":`, err);
+            processedOutputs[key] = value;
+          }
+        } else if (value instanceof Uint8Array || ArrayBuffer.isView(value)) {
           const schematicId = crypto.randomUUID();
           const newSchematic: NewSchematic = {
             id: schematicId,
             name: key,
             flowId: flow.id,
             executionId,
-            format: 'litematic', // Default format
+            format: 'schem',
             data: Buffer.from(value as Uint8Array).toString('base64'),
             createdAt: new Date(),
           };
           await db.insert(schematics).values(newSchematic);
+          processedOutputs[key] = {
+            format: 'binary',
+            data: Buffer.from(value as Uint8Array).toString('base64'),
+            metadata: {
+              name: key,
+              fileSize: (value as Uint8Array).length,
+            },
+          };
+        } else {
+          processedOutputs[key] = value;
         }
       }
     }
@@ -120,7 +160,7 @@ executeRouter.post('/', async (c) => {
       executionId,
       status: result.status,
       logs,
-      result: result.finalOutput,
+      result: processedOutputs,
       executionTime: result.endTime ? result.endTime - result.startTime : null,
     });
 

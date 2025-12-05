@@ -245,7 +245,7 @@ export class MessageHandler {
     
     for (const [key, value] of Object.entries(schematics)) {
       if (this.isSchematicWrapper(value)) {
-        const handle = workerDataStore.store(value, 'schematic', {
+        const handle = workerDataStore.store(value, 'schem', {
           name: key,
           pinned: true, // Keep in memory for subsequent nodes
         });

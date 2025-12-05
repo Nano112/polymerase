@@ -10,9 +10,14 @@ import type { ApiResponse } from 'shared/dist';
 import { initializeDatabase } from './db/index.js';
 import flowsRouter from './routes/flows.js';
 import executeRouter from './routes/execute.js';
+import apiV1Router from './routes/api-v1.js';
+import { executionService } from './services/execution.js';
 
 // Initialize database
 initializeDatabase();
+
+// Start cleanup scheduler for expired runs
+executionService.startCleanupScheduler(60000); // Run every minute
 
 export const app = new Hono()
 	// Middleware
@@ -25,6 +30,12 @@ export const app = new Hono()
 			name: 'Polymerase Server',
 			version: '0.5.0',
 			status: 'running',
+			features: {
+				flowExecution: true,
+				apiV1: true,
+				openApi: true,
+				asyncExecution: true,
+			},
 		});
 	})
 
@@ -39,7 +50,10 @@ export const app = new Hono()
 
 	// API Routes
 	.route('/api/flows', flowsRouter)
-	.route('/api/execute', executeRouter);
+	.route('/api/execute', executeRouter)
+	
+	// API v1 Routes (with auth, OpenAPI, run tracking)
+	.route('/api/v1', apiV1Router);
 
 // Export for Hono client type inference
 export type AppType = typeof app;
@@ -48,6 +62,7 @@ export type AppType = typeof app;
 const port = Number(process.env.PORT) || 3001;
 
 console.log(`Polymerase Server starting on http://localhost:${port}`);
+console.log(`API v1 available at http://localhost:${port}/api/v1`);
 
 export default {
   port,
