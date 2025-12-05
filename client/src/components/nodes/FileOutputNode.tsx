@@ -101,7 +101,7 @@ const FileOutputNode = memo(({ id, data, selected }: NodeProps & { data: FileOut
       // Convert data to blob
       let blob: Blob;
       if (inputData.data instanceof Uint8Array) {
-        blob = new Blob([inputData.data], { type: getMimeType(format) });
+        blob = new Blob([inputData.data as any], { type: getMimeType(format) });
       } else if (typeof inputData.data === 'string') {
         blob = new Blob([inputData.data], { type: getMimeType(format) });
       } else {

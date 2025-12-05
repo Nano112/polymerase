@@ -75,7 +75,7 @@ const MemoizedImageRenderer = memo(({ data, format }: { data: Uint8Array | strin
       return `data:image/${format};base64,${data}`;
     }
     // Uint8Array - convert to blob URL
-    const blob = new Blob([data], { type: `image/${format}` });
+    const blob = new Blob([data as any], { type: `image/${format}` });
     return URL.createObjectURL(blob);
   }, [data, format]);
 

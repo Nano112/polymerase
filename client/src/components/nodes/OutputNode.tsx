@@ -186,7 +186,7 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
         fileName = `${baseName}${extension}`;
         
         if (dataValue.data instanceof Uint8Array) {
-          blob = new Blob([dataValue.data], { type: getMimeType(dataValue.format) });
+          blob = new Blob([dataValue.data as any], { type: getMimeType(dataValue.format) });
         } else if (typeof dataValue.data === 'string') {
           // Check if it's base64-encoded binary data (common for schematics)
           const isBinaryFormat = ['litematic', 'schematic', 'schem', 'nbt', 'binary'].includes(dataValue.format);
