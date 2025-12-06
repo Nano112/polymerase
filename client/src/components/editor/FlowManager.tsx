@@ -40,6 +40,7 @@ interface FlowManagerProps {
 export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
   const navigate = useNavigate();
   const [showNewFlow, setShowNewFlow] = useState(false);
+  // @ts-ignore
   const [newFlowName, setNewFlowName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -105,10 +106,13 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
         loadFlow({
           ...flowData,
           id: crypto.randomUUID(),
-          name: flowData.name + ' (Imported)',
+          name: flowData.name,
           nodes: newNodes,
           edges: newEdges,
         });
+        
+        // Set flowId to null so it's treated as unsaved
+        useFlowStore.getState().setFlowId(null);
         
         onClose();
       } catch (err) {
@@ -157,6 +161,9 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
     onSuccess: (flow) => {
       useFlowStore.getState().setFlowId(flow.id);
       queryClient.invalidateQueries({ queryKey: ['flows'] });
+      if (window.location.pathname === '/editor') {
+        navigate(`/flow/${flow.id}`);
+      }
     },
   });
 
@@ -241,22 +248,20 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
               <Plus className="w-4 h-4" />
               New Flow
             </button>
-            {flowId && (
-              <button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all disabled:opacity-50"
-              >
-                {saveMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : saveMutation.isSuccess ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <FileCode className="w-4 h-4" />
-                )}
-                Save Current
-              </button>
-            )}
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all disabled:opacity-50"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : saveMutation.isSuccess ? (
+                <Check className="w-4 h-4 text-green-400" />
+              ) : (
+                <FileCode className="w-4 h-4" />
+              )}
+              {flowId ? 'Save Current' : 'Save Flow'}
+            </button>
             <div className="w-px h-6 bg-neutral-700" />
             <button
               onClick={handleExportToFile}
@@ -287,23 +292,20 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
         {showNewFlow && (
           <div className="mb-6 p-4 rounded-xl border border-purple-500/20 bg-purple-900/10 animate-slide-up">
             <div className="flex items-center gap-2 mb-3">
-              <Plus className="w-4 h-4 text-purple-400" />
-              <span className="text-sm font-medium text-purple-100">Create New Flow</span>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newFlowName}
-                onChange={(e) => setNewFlowName(e.target.value)}
-                placeholder="Flow name..."
-                className="flex-1 input"
-                autoFocus
-              />
-              <button
-                onClick={() => createMutation.mutate(newFlowName)}
-                disabled={!newFlowName.trim() || createMutation.isPending}
-                className="px-4 py-2 text-sm font-medium text-white rounded-lg bg-purple-600 hover:bg-purple-500 transition-colors disabled:opacity-50"
-              >
+                    <button
+                      onClick={() => saveMutation.mutate()}
+                      disabled={saveMutation.isPending}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all disabled:opacity-50"
+                    >
+                      {saveMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : saveMutation.isSuccess ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <FileCode className="w-4 h-4" />
+                      )}
+                      {flowId ? 'Save Current' : 'Save Flow'}
+                  
                 {createMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
