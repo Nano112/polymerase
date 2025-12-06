@@ -12,6 +12,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
     const [isInitialized, setIsInitialized] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // @ts-ignore
     const lastLoadedDataRef = useRef<string | null>(null);
     const ref = useRef<HTMLDivElement>(null);
 
@@ -91,6 +92,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
                     return new Blob([buffer], { type: "application/zip" });
                 },
             }, {
+                singleSchematicMode: true,
                 backgroundColor: '#1a1a1a',
                 showCameraPathVisualization: false,
                 enableInteraction: true,
@@ -120,22 +122,6 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
         }
     }, [isInitialized]);
 
-    const getSchematicHash = useCallback((data: Uint8Array | ArrayBuffer): string => {
-        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-        const len = bytes.byteLength;
-        const mid = Math.floor(len / 2);
-        const samples = [
-            len,
-            bytes[0] || 0,
-            bytes[1] || 0,
-            bytes[mid] || 0,
-            bytes[mid + 1] || 0,
-            bytes[len - 2] || 0,
-            bytes[len - 1] || 0,
-        ];
-        return samples.join('-');
-    }, []);
-
     const loadSchematics = useCallback(async () => {
         const renderer = rendererRef.current;
 
@@ -149,12 +135,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             return;
         }
 
-        const newHash = getSchematicHash(schematic);
-        if (newHash === lastLoadedDataRef.current) {
-            return;
-        }
-
-        console.log('📦 Loading new schematic, hash:', newHash);
+        console.log('📦 Loading new schematic');
         setIsLoading(true);
         setError(null);
 
@@ -192,17 +173,15 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             return;
         }
 
-        const schematicId = `schematic_${Date.now()}`;
+        // Use a stable ID to allow replacement/updating
+        const schematicId = 'viewed-schematic';
 
         try {
-            if (lastLoadedDataRef.current !== null && renderer.schematicManager.removeAllSchematics) {
-                console.log('🗑️ Clearing previous schematics...');
-                renderer.schematicManager.removeAllSchematics();
-                await new Promise(resolve => requestAnimationFrame(resolve));
-            }
+          
 
-            await renderer.schematicManager.loadSchematic(schematicId, dataToLoad);
-            lastLoadedDataRef.current = newHash;
+            await renderer.schematicManager.loadSchematic(schematicId, dataToLoad, {
+                focused: false,
+            });
             console.log('✅ Schematic loaded successfully');
             setIsLoading(false);
         } catch (loadError) {
@@ -210,7 +189,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
             setError('Failed to load schematic');
             setIsLoading(false);
         }
-    }, [isInitialized, schematic, getSchematicHash]);
+    }, [isInitialized, schematic]);
 
     const handleResize = useCallback(() => {
         rendererRef.current?.renderManager?.updateCanvasSize();
@@ -228,7 +207,7 @@ const SchematicRenderer = ({ schematic }: { schematic: Uint8Array | ArrayBuffer 
 
         const timer = setTimeout(() => {
             loadSchematics();
-        }, 50);
+        }, 10);
 
         return () => clearTimeout(timer);
     }, [schematic, isInitialized, loadSchematics]);

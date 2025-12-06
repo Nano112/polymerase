@@ -262,12 +262,7 @@ export class MessageHandler {
   private resolveHandleInputs(inputs: Record<string, unknown>): Record<string, unknown> {
     const resolved: Record<string, unknown> = {};
     
-    console.log('[Worker] resolveHandleInputs called with:', JSON.stringify(inputs, (_key, value) => {
-      if (value && typeof value === 'object' && value.constructor?.name === 'SchematicWrapper') {
-        return '[SchematicWrapper]';
-      }
-      return value;
-    }, 2));
+
     
     for (const [key, value] of Object.entries(inputs)) {
       console.log(`[Worker] Resolving input "${key}":`, typeof value, value);

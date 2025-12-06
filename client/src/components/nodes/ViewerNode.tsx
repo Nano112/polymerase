@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { Handle, Position, type NodeProps, NodeResizer } from '@xyflow/react';
-import { 
+import {
   Eye, Box, Hash, Type, ToggleLeft, ArrowRight,
   Image, Table, FileJson, List, Binary, AlertCircle,
   Maximize2, Minimize2
@@ -8,9 +8,9 @@ import {
 import { useFlowStore } from '../../store/flowStore';
 import { useShallow } from 'zustand/react/shallow';
 import { NodeContextMenu, NodeContextMenuItem, NodeContextMenuSeparator } from './NodeContextMenu';
-import { 
-  isSchematicData, 
-  isImageData, 
+import {
+  isSchematicData,
+  isImageData,
   isTabularData,
   type SchematicData,
   type ImageData as CoreImageData,
@@ -32,14 +32,14 @@ interface ViewerNodeData {
   isResizable?: boolean;
 }
 
-type ValueType = 
-  | 'null' 
-  | 'number' 
-  | 'string' 
-  | 'boolean' 
-  | 'array' 
-  | 'object' 
-  | 'schematic' 
+type ValueType =
+  | 'null'
+  | 'number'
+  | 'string'
+  | 'boolean'
+  | 'array'
+  | 'object'
+  | 'schematic'
   | 'image'
   | 'table'
   | 'json'
@@ -55,18 +55,6 @@ const MemoizedSchematicRenderer = memo(({ schematic }: { schematic: Uint8Array |
       <SchematicRenderer schematic={schematic} />
     </div>
   );
-}, (prev, next) => {
-  if (prev.schematic === next.schematic) return true;
-  if (!prev.schematic || !next.schematic) return false;
-  
-  const prevBytes = prev.schematic instanceof Uint8Array ? prev.schematic : new Uint8Array(prev.schematic);
-  const nextBytes = next.schematic instanceof Uint8Array ? next.schematic : new Uint8Array(next.schematic);
-  
-  if (prevBytes.byteLength !== nextBytes.byteLength) return false;
-  for (let i = 0; i < Math.min(8, prevBytes.byteLength); i++) {
-    if (prevBytes[i] !== nextBytes[i]) return false;
-  }
-  return true;
 });
 
 const MemoizedImageRenderer = memo(({ data, format }: { data: Uint8Array | string; format: string }) => {
@@ -84,9 +72,9 @@ const MemoizedImageRenderer = memo(({ data, format }: { data: Uint8Array | strin
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-neutral-950 rounded border border-neutral-800 overflow-hidden">
-      <img 
-        src={src} 
-        alt="Preview" 
+      <img
+        src={src}
+        alt="Preview"
         className="max-w-full max-h-full object-contain"
       />
     </div>
@@ -102,12 +90,24 @@ const MemoizedImageRenderer = memo(({ data, format }: { data: Uint8Array | strin
 
 function getValueType(value: unknown): ValueType {
   if (value === null || value === undefined) return 'null';
-  
+
+
+
   // Check for wrapped data types first
   if (isSchematicData(value)) return 'schematic';
+
+  // Fallback check for schematic-like objects (e.g. from stale cache or cross-realm)
+  if (typeof value === 'object' && value !== null) {
+    const v = value as any;
+    if (v.format && (v.data || v.buffer) &&
+      ['litematic', 'schematic', 'schem', 'nbt', 'mock'].includes(v.format)) {
+      return 'schematic';
+    }
+  }
+
   if (isImageData(value)) return 'image';
   if (isTabularData(value)) return 'table';
-  
+
   // Check if it's a DataValue with format
   if (typeof value === 'object' && 'format' in (value as object) && 'data' in (value as object)) {
     const dv = value as DataValue;
@@ -116,30 +116,38 @@ function getValueType(value: unknown): ValueType {
     if (['text', 'markdown'].includes(dv.format)) return 'string';
     return 'binary';
   }
-  
+
   if (Array.isArray(value)) return 'array';
   if (typeof value === 'object') {
     return 'object';
   }
-  
+
   if (typeof value === 'number') return 'number';
   if (typeof value === 'string') return 'string';
   if (typeof value === 'boolean') return 'boolean';
-  
+
   return 'null';
 }
 
 function unwrapValue(rawOutput: unknown): unknown {
   if (!rawOutput || typeof rawOutput !== 'object') return rawOutput;
-  
+
   // If it's already a known data type, return it
   if (isSchematicData(rawOutput)) return rawOutput;
+
+  // Fallback check for schematic-like objects
+  const v = rawOutput as any;
+  if (v && v.format && (v.data || v.buffer) &&
+    ['litematic', 'schematic', 'schem', 'nbt', 'mock'].includes(v.format)) {
+    return rawOutput;
+  }
+
   if (isImageData(rawOutput)) return rawOutput;
   if (isTabularData(rawOutput)) return rawOutput;
-  
+
   const record = rawOutput as Record<string, unknown>;
   const entries = Object.entries(record);
-  
+
   // If there's a 'default' key, prefer that
   if ('default' in record) {
     const defaultVal = record['default'];
@@ -147,20 +155,26 @@ function unwrapValue(rawOutput: unknown): unknown {
       return defaultVal;
     }
   }
-  
+
   // Check if it's an object with a single output value
   if (entries.length === 1) {
     const [, value] = entries[0];
     return value;
   }
-  
+
   // Check for known data types in values (prioritize finding schematic/image/table)
   for (const [, value] of entries) {
     if (isSchematicData(value) || isImageData(value) || isTabularData(value)) {
       return value;
     }
+    // Fallback check for schematic-like objects in nested values
+    const v = value as any;
+    if (v && v.format && (v.data || v.buffer) &&
+      ['litematic', 'schematic', 'schem', 'nbt', 'mock'].includes(v.format)) {
+      return value;
+    }
   }
-  
+
   return rawOutput;
 }
 
@@ -217,7 +231,7 @@ function NumberPreview({ value }: { value: number }) {
 function StringPreview({ value }: { value: string }) {
   const lines = value.split('\n');
   const isMultiline = lines.length > 1;
-  
+
   return (
     <div className="py-2">
       <div className="text-xs font-mono text-green-400 break-all max-h-32 overflow-y-auto whitespace-pre-wrap bg-neutral-900/50 rounded p-2">
@@ -243,14 +257,14 @@ function BooleanPreview({ value }: { value: boolean }) {
 
 function ArrayPreview({ value }: { value: unknown[] }) {
   // Check if it's a simple array (numbers, strings) or complex
-  const isSimple = value.every(item => 
+  const isSimple = value.every(item =>
     typeof item === 'number' || typeof item === 'string' || typeof item === 'boolean'
   );
-  
+
   // Check if it might be tabular data (array of objects with same keys)
-  const isTabular = value.length > 0 && 
+  const isTabular = value.length > 0 &&
     value.every(item => typeof item === 'object' && item !== null && !Array.isArray(item));
-  
+
   if (isTabular && value.length > 0) {
     const columns = Object.keys(value[0] as object);
     return (
@@ -284,7 +298,7 @@ function ArrayPreview({ value }: { value: unknown[] }) {
       </div>
     );
   }
-  
+
   if (isSimple) {
     return (
       <div className="py-2">
@@ -303,7 +317,7 @@ function ArrayPreview({ value }: { value: unknown[] }) {
       </div>
     );
   }
-  
+
   // Complex array
   return (
     <div className="py-2">
@@ -319,7 +333,7 @@ function ArrayPreview({ value }: { value: unknown[] }) {
 function ObjectPreview({ value }: { value: object }) {
   const keys = Object.keys(value);
   const str = JSON.stringify(value, null, 2);
-  
+
   return (
     <div className="py-2">
       <pre className="text-[10px] text-neutral-300 font-mono bg-neutral-900/50 rounded p-2 max-h-32 overflow-y-auto">
@@ -335,7 +349,7 @@ function TablePreview({ value }: { value: TabularData | DataValue }) {
   // Parse CSV if needed
   let rows: string[][] = [];
   let headers: string[] = [];
-  
+
   let content = '';
   if (typeof value.data === 'string') {
     content = value.data;
@@ -364,7 +378,7 @@ function TablePreview({ value }: { value: TabularData | DataValue }) {
       rows = lines.slice(1).map(line => line.split(bestDelimiter).map(c => c.trim()));
     }
   }
-  
+
   return (
     <div className="py-2 overflow-auto max-h-48">
       <table className="w-full text-[10px] font-mono border-collapse">
@@ -399,7 +413,7 @@ function TablePreview({ value }: { value: TabularData | DataValue }) {
 
 function ImagePreview({ value, isExecuting }: { value: CoreImageData; isExecuting: boolean }) {
   const binaryData = value.data instanceof Uint8Array ? value.data : value.data;
-  
+
   return (
     <div className="flex flex-col h-full w-full relative">
       {isExecuting && (
@@ -422,10 +436,10 @@ function ImagePreview({ value, isExecuting }: { value: CoreImageData; isExecutin
 }
 
 function SchematicPreview({ value, isExecuting }: { value: SchematicData; isExecuting: boolean }) {
-  const binaryData = value.data instanceof Uint8Array 
-    ? value.data 
+  const binaryData = value.data instanceof Uint8Array
+    ? value.data
     : new TextEncoder().encode(value.data as string);
-  
+
   return (
     <div className="flex flex-col h-full w-full relative">
       {isExecuting && (
@@ -447,10 +461,10 @@ function SchematicPreview({ value, isExecuting }: { value: SchematicData; isExec
 }
 
 function BinaryPreview({ value }: { value: DataValue }) {
-  const size = value.data instanceof Uint8Array 
-    ? value.data.byteLength 
+  const size = value.data instanceof Uint8Array
+    ? value.data.byteLength
     : (typeof value.data === 'string' ? value.data.length : 0);
-  
+
   return (
     <div className="text-center py-4">
       <Binary className="w-8 h-8 mx-auto mb-2 text-neutral-500" />
@@ -468,52 +482,75 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNodeData = useFlowStore((state) => state.updateNodeData);
   const setNodeOutput = useFlowStore((state) => state.setNodeOutput);
-  
+
   // Optimized selector to only re-render when relevant data changes
   const { viewerCache, sourceCache, inputEdge } = useFlowStore(useShallow((state) => {
     const inputEdge = state.edges.find(e => e.target === id);
     const viewerCache = state.nodeCache[id];
     const sourceCache = inputEdge ? state.nodeCache[inputEdge.source] : null;
-    
+
     return { viewerCache, sourceCache, inputEdge };
   }));
 
   const [isHovered, setIsHovered] = useState(false);
-  
+
   // Cache for persistence during re-execution
   const lastValueRef = useRef<unknown>(null);
-  
+
   const isResized = !!((width && height) || (data.width && data.height));
   const currentWidth = width || data.width;
   const currentHeight = height || data.height;
-  
+
   // Use viewer's own output if it has been executed (contains serialized data)
   // Otherwise fall back to source cache (for passthrough display before execution)
-  const viewerHasOutput = (viewerCache?.status === 'completed' || viewerCache?.status === 'cached') && viewerCache?.output;
-  const rawOutput = viewerHasOutput 
-    ? viewerCache.output 
-    : sourceCache?.output;
-  const sourceHasOutput = sourceCache?.status === 'completed' || sourceCache?.status === 'cached';
-  const hasInput = !!inputEdge && (viewerHasOutput || sourceHasOutput);
+  // We prefer fresh data, but if everything is stale, we prefer the viewer's unwrapped cache
+  const viewerIsFresh = viewerCache?.status === 'completed' || viewerCache?.status === 'cached';
+  const sourceIsFresh = sourceCache?.status === 'completed' || sourceCache?.status === 'cached';
+
+  let rawOutput;
+  if (viewerIsFresh && viewerCache?.output) {
+    rawOutput = viewerCache.output;
+  } else if (sourceIsFresh && sourceCache?.output) {
+    rawOutput = sourceCache.output;
+  } else {
+    // Both are stale or missing - prefer viewer cache as it's already unwrapped
+    // If we have a lastValueRef, use that to prevent flickering during re-execution
+    rawOutput = viewerCache?.output ?? sourceCache?.output ?? lastValueRef.current;
+  }
+
+  const viewerHasOutput = !!viewerCache?.output;
+  const sourceHasOutput = !!sourceCache?.output;
+  const hasInput = !!inputEdge && (viewerHasOutput || sourceHasOutput || !!lastValueRef.current);
   const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending' || viewerCache?.status === 'running';
-  
+
   // Unwrap and process the value
   const inputValue = useMemo(() => unwrapValue(rawOutput), [rawOutput]);
-  
+
   // Update cache ref when we have valid input
   if (inputValue !== undefined && inputValue !== null) {
-    lastValueRef.current = inputValue;
+    // Don't cache handles as valid values
+    const isHandle = typeof inputValue === 'object' && '_schematicHandle' in (inputValue as any);
+    if (!isHandle) {
+      lastValueRef.current = inputValue;
+    }
   }
-  
+
   // Display value (use cached if current is undefined)
-  const displayValue = inputValue ?? lastValueRef.current;
-  const valueType = displayValue !== null && displayValue !== undefined 
-    ? getValueType(displayValue) 
+  // During execution, we want to keep showing the last valid value until new data arrives
+  // We also check if the new value is "null" or "undefined" which might happen during transition
+  // We also check if it's a handle (intermediate state)
+  const isHandle = inputValue && typeof inputValue === 'object' && '_schematicHandle' in (inputValue as any);
+  const displayValue = (isExecuting || inputValue === undefined || inputValue === null || isHandle) 
+    ? lastValueRef.current 
+    : inputValue;
+    
+  const valueType = displayValue !== null && displayValue !== undefined
+    ? getValueType(displayValue)
     : 'null';
-  
+
   const passthrough = data.passthrough ?? false;
   const isResizable = data.isResizable ?? false;
-  
+
   // Update viewer's output cache when passthrough is enabled and we have input
   // This makes the output available to downstream nodes
   useEffect(() => {
@@ -548,7 +585,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
         </div>
       );
     }
-    
+
     // Waiting for data
     if (displayValue === undefined || displayValue === null) {
       return (
@@ -563,31 +600,31 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
     switch (valueType) {
       case 'number':
         return <NumberPreview value={displayValue as number} />;
-      
+
       case 'string':
         return <StringPreview value={displayValue as string} />;
-      
+
       case 'boolean':
         return <BooleanPreview value={displayValue as boolean} />;
-      
+
       case 'array':
         return <ArrayPreview value={displayValue as unknown[]} />;
-      
+
       case 'object':
         return <ObjectPreview value={displayValue as object} />;
-      
+
       case 'schematic':
         return <SchematicPreview value={displayValue as SchematicData} isExecuting={isExecuting} />;
-      
+
       case 'image':
         return <ImagePreview value={displayValue as CoreImageData} isExecuting={isExecuting} />;
-      
+
       case 'table':
         return <TablePreview value={displayValue as TabularData} />;
-      
+
       case 'binary':
         return <BinaryPreview value={displayValue as DataValue} />;
-      
+
       default:
         return (
           <div className="text-center py-4 text-neutral-500">
@@ -617,10 +654,10 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
           bg-neutral-900 flex flex-col
           border transition-all duration-200 group
           ${isResized ? 'w-full h-full' : 'min-w-[180px] max-w-[280px]'}
-          ${selected 
-            ? 'border-pink-500/50 shadow-lg shadow-pink-500/10' 
-            : isHovered 
-              ? 'border-neutral-600/50' 
+          ${selected
+            ? 'border-pink-500/50 shadow-lg shadow-pink-500/10'
+            : isHovered
+              ? 'border-neutral-600/50'
               : hasInput
                 ? 'border-green-500/30'
                 : 'border-neutral-800/50'
@@ -635,9 +672,8 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
         <div className="px-3 py-2.5 bg-gradient-to-r from-pink-900/30 to-neutral-900/50 border-b border-neutral-800/50 rounded-t-xl">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${
-                hasInput ? 'bg-green-500/20' : 'bg-pink-500/20'
-              }`}>
+              <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${hasInput ? 'bg-green-500/20' : 'bg-pink-500/20'
+                }`}>
                 {hasInput ? (
                   <TypeIcon className={`w-3.5 h-3.5 ${typeColor}`} />
                 ) : (
@@ -653,15 +689,15 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
                 </span>
               )}
             </div>
-            
+
             <div className="flex items-center gap-1">
               {/* Passthrough toggle */}
               <button
                 onClick={togglePassthrough}
                 className={`
                   p-1 rounded transition-colors flex items-center gap-1
-                  ${passthrough 
-                    ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
+                  ${passthrough
+                    ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                     : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
                   }
                 `}
@@ -672,16 +708,16 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
 
               {/* Context Menu */}
               <NodeContextMenu>
-                <NodeContextMenuItem 
-                  icon={ArrowRight} 
+                <NodeContextMenuItem
+                  icon={ArrowRight}
                   onClick={togglePassthrough}
                   checked={passthrough}
                 >
                   Passthrough
                 </NodeContextMenuItem>
                 <NodeContextMenuSeparator />
-                <NodeContextMenuItem 
-                  icon={isResizable ? Minimize2 : Maximize2} 
+                <NodeContextMenuItem
+                  icon={isResizable ? Minimize2 : Maximize2}
                   onClick={toggleResizable}
                   checked={isResizable}
                 >
@@ -703,9 +739,8 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
           position={Position.Left}
           id="input"
           style={{ left: '-11px', top: '50%', transform: 'translateY(-50%)' }}
-          className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
-            hasInput ? '!bg-green-500' : '!bg-blue-500'
-          }`}
+          className={`!w-3 !h-3 !border-2 !border-neutral-900 ${hasInput ? '!bg-green-500' : '!bg-blue-500'
+            }`}
           title="Data input"
         />
 
@@ -716,9 +751,8 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
             position={Position.Right}
             id="output"
             style={{ right: '-11px', top: '50%', transform: 'translateY(-50%)' }}
-            className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
-              hasInput ? '!bg-green-500' : '!bg-amber-500'
-            }`}
+            className={`!w-3 !h-3 !border-2 !border-neutral-900 ${hasInput ? '!bg-green-500' : '!bg-amber-500'
+              }`}
             title="Data output (passthrough)"
           />
         )}

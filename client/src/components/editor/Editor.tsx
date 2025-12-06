@@ -1059,7 +1059,6 @@ export function Editor() {
       
       // Find code chains for batched execution  
       const codeChains = findCodeChains(nodes, edges);
-      const executedChains = new Set<string>();
       
       // Build a map of node -> chain for quick lookup
       const nodeToChain = new Map<string, string>();
@@ -1108,17 +1107,6 @@ export function Editor() {
 
         // Handle code nodes
         if (node.type === 'code') {
-          const chainId = nodeToChain.get(node.id);
-          
-          // Skip if we already executed this chain
-          if (chainId && executedChains.has(chainId)) {
-            continue;
-          }
-          
-          if (chainId) {
-            executedChains.add(chainId);
-          }
-          
           // Execute single code node
           const code = node.data.code;
           

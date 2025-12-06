@@ -486,6 +486,24 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       set({ liveExecutionTimer: timer });
     } else if (shouldInvalidate) {
       get().invalidateNode(nodeId);
+
+      // Emit event for live execution if in live mode (debounced)
+      const currentTimer = get().liveExecutionTimer;
+      if (currentTimer) {
+        clearTimeout(currentTimer);
+      }
+
+      const timer = setTimeout(() => {
+        const currentSettings = get().executionSettings;
+        if (currentSettings.mode === 'live') {
+          window.dispatchEvent(new CustomEvent('polymerase:liveExecutionTrigger', {
+            detail: { sourceNodeId: nodeId, type: 'code-change' }
+          }));
+        }
+        set({ liveExecutionTimer: null });
+      }, 300);
+      
+      set({ liveExecutionTimer: timer });
     }
   },
 
