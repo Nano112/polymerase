@@ -5,6 +5,8 @@
 
 import { isSchematicData, type SchematicData } from '../types/index.js';
 
+import {ExecutionModeWrapper} from 'nucleation';
+
 /**
  * Schematic wrapper interface (compatible with nucleation)
  */
@@ -16,6 +18,7 @@ export interface SchematicWrapper {
   to_litematic(): Uint8Array;
   get_dimensions(): Int32Array | number[];
   blocks(): Array<{ x: number; y: number; z: number; name: string }>;
+  createDefinitionRegionFromPoint(name: string, x: number, y: number, z: number): void;
   size?: { x: number; y: number; z: number };
 }
 
@@ -210,5 +213,10 @@ export const SchematicUtils = {
       }
     }
   },
+
+  /**
+   * ExecutionModeWrapper for building execution modes
+   */
+  ExecutionModeWrapper,
 } as const;
 

@@ -301,9 +301,9 @@ export class WorkerDataStore {
     if (!value || typeof value !== 'object') return false;
     const obj = value as Record<string, unknown>;
     return typeof obj.to_schematic === 'function' ||
-           typeof obj.serialize === 'function' || 
-           typeof obj.get_block === 'function' ||
-           typeof obj.set_block === 'function';
+      typeof obj.serialize === 'function' ||
+      typeof obj.get_block === 'function' ||
+      typeof obj.set_block === 'function';
   }
 
   /**
@@ -346,6 +346,9 @@ interface SchematicWrapperLike {
   serialize?: () => Uint8Array;
   get_block?: (x: number, y: number, z: number) => string;
   set_block?: (x: number, y: number, z: number, block: string) => void;
+  createDefinitionRegionFromPoint?: (name: string, x: number, y: number, z: number) => void;
+  getDimensions?: () => { x: number; y: number; z: number };
+  
 }
 
 // Export a singleton instance

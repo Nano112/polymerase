@@ -62,6 +62,9 @@ export async function createContextProviders(
   // Initialize schematic provider (async - may load WASM)
   const SchematicClass = await initializeSchematicProvider();
 
+  // Add ExecutionModeWrapper as a static property on the class
+  (SchematicClass as any).ExecutionModeWrapper = (await import('nucleation')).ExecutionModeWrapper;
+
   // Create providers
   const Logger = createLogger(logCallback);
   const Noise = createNoiseProvider(seed);

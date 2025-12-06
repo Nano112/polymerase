@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import anime from 'animejs';
 import { Zap, Book } from 'lucide-react';
-import { MockFlowGraph } from './MockFlowGraph';
+// import { MockFlowGraph } from './MockFlowGraph';
 import { AnimatedLogo } from './AnimatedLogo';
 
 export function Hero() {
@@ -113,33 +113,10 @@ export function Hero() {
           {/* Glow behind card */}
           <div className="absolute -inset-4 bg-gradient-to-b from-green-500/10 via-transparent to-transparent rounded-3xl blur-2xl opacity-50" />
           
-          <div className="relative rounded-2xl border border-white/10 bg-[#0a0a0c] shadow-2xl shadow-black/50 overflow-hidden">
-            {/* Editor Top Bar */}
-            <div className="h-11 border-b border-white/5 bg-[#111113] flex items-center justify-between px-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-white/10 hover:bg-red-500/80 transition-colors" />
-                <div className="w-3 h-3 rounded-full bg-white/10 hover:bg-yellow-500/80 transition-colors" />
-                <div className="w-3 h-3 rounded-full bg-white/10 hover:bg-green-500/80 transition-colors" />
-              </div>
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <span className="px-2.5 py-1 bg-green-500/10 text-green-400 rounded-md border border-green-500/20">
-                  10/10 computed
-                </span>
-                <span className="text-neutral-500">API Mode</span>
-              </div>
-            </div>
 
-            {/* Canvas Area */}
-            <div className="relative aspect-[16/9] bg-[#08080a]">
-              {/* Dot grid pattern */}
-              <div className="absolute inset-0 bg-[radial-gradient(#ffffff12_1px,transparent_1px)] [background-size:24px_24px]" />
+
+            {/* <MockFlowGraph /> */}
               
-              <MockFlowGraph />
-              
-              {/* Bottom fade */}
-              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0a0a0c] to-transparent pointer-events-none" />
-            </div>
-          </div>
         </div>
       </div>
     </section>
