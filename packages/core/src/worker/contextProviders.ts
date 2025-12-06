@@ -63,14 +63,27 @@ export async function createContextProviders(
   const SchematicClass = await initializeSchematicProvider();
 
   const nucleation = await import('nucleation');
-    // @ts-ignore
-  (SchematicClass as any).SchematicBuilder = nucleation.SchematicBuilderWrapper;
+  
+  // Wrap prototype methods for better error messages
   // @ts-ignore
-  (SchematicClass as any).ExecutionMode = nucleation.ExecutionModeWrapper;
+  wrapPrototypeMethods(SchematicClass, 'Schematic');
+  // @ts-ignore
+  wrapPrototypeMethods(nucleation.SchematicBuilderWrapper, 'Schematic.SchematicBuilder');
+  // @ts-ignore
+  wrapPrototypeMethods(nucleation.ExecutionModeWrapper, 'Schematic.ExecutionMode');
+  // @ts-ignore
+  wrapPrototypeMethods(nucleation.BlockPosition, 'Schematic.BlockPosition');
+  // @ts-ignore
+  wrapPrototypeMethods(nucleation.DefinitionRegionWrapper, 'Schematic.DefinitionRegion');
+
     // @ts-ignore
-  (SchematicClass as any).BlockPosition = nucleation.BlockPosition;
+  (SchematicClass as any).SchematicBuilder = wrapWasmClass(nucleation.SchematicBuilderWrapper, 'Schematic.SchematicBuilder');
+  // @ts-ignore
+  (SchematicClass as any).ExecutionMode = wrapWasmClass(nucleation.ExecutionModeWrapper, 'Schematic.ExecutionMode');
+    // @ts-ignore
+  (SchematicClass as any).BlockPosition = wrapWasmClass(nucleation.BlockPosition, 'Schematic.BlockPosition');
       // @ts-ignore
-  (SchematicClass as any).DefinitionRegion = nucleation.DefinitionRegionWrapper;
+  (SchematicClass as any).DefinitionRegion = wrapWasmClass(nucleation.DefinitionRegionWrapper, 'Schematic.DefinitionRegion');
 
   console.log('⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡');
   console.log('Schematic provider initialized with Nucleation WASM.');
@@ -138,5 +151,90 @@ export function createMinimalContextProviders(
     }),
     ...customProviders,
   };
+}
+
+/**
+ * Helper to wrap WASM classes and provide better error messages
+ */
+function wrapWasmClass(Class: any, name: string) {
+  if (!Class) return Class;
+
+  const handler: ProxyHandler<any> = {
+    construct(target, args) {
+      args.forEach((arg, i) => {
+        if (arg === undefined || arg === null) {
+          throw new Error(`${name} constructor: Argument ${i} cannot be null or undefined`);
+        }
+      });
+      try {
+        return new target(...args);
+      } catch (err) {
+        const error = err as Error;
+        throw new Error(`${name} constructor failed: ${error.message}`);
+      }
+    },
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      
+      // Wrap static methods
+      if (typeof value === 'function' && typeof prop === 'string' && !['prototype', 'name', 'length', 'toString'].includes(prop)) {
+        return function(this: any, ...args: any[]) {
+          args.forEach((arg, i) => {
+            if (arg === undefined || arg === null) {
+              throw new Error(`${name}.${prop}: Argument ${i} cannot be null or undefined`);
+            }
+          });
+          try {
+            return value.apply(this, args);
+          } catch (err) {
+            const error = err as Error;
+            if (error.message?.includes('null pointer')) {
+               throw new Error(`${name}.${prop} failed: Null pointer passed to Rust. This usually means an argument was invalid or a WASM object was already freed.`);
+            }
+            throw new Error(`${name}.${prop} failed: ${error.message}`);
+          }
+        };
+      }
+      return value;
+    }
+  };
+
+  return new Proxy(Class, handler);
+}
+
+/**
+ * Helper to wrap prototype methods of WASM classes
+ */
+function wrapPrototypeMethods(Class: any, name: string) {
+  if (!Class || !Class.prototype) return;
+
+  const proto = Class.prototype;
+  const props = Object.getOwnPropertyNames(proto);
+  
+  for (const prop of props) {
+    // Use getOwnPropertyDescriptor to avoid triggering getters
+    const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+    if (!descriptor || !descriptor.value) continue;
+
+    const value = descriptor.value;
+    if (typeof value === 'function' && prop !== 'constructor') {
+      proto[prop] = function(this: any, ...args: any[]) {
+        args.forEach((arg, i) => {
+          if (arg === undefined || arg === null) {
+            throw new Error(`${name}.${prop}: Argument ${i} cannot be null or undefined`);
+          }
+        });
+        try {
+          return value.apply(this, args);
+        } catch (err) {
+          const error = err as Error;
+          if (error.message?.includes('null pointer')) {
+             throw new Error(`${name}.${prop} failed: Null pointer passed to Rust. This usually means an argument was invalid or a WASM object was already freed.`);
+          }
+          throw new Error(`${name}.${prop} failed: ${error.message}`);
+        }
+      };
+    }
+  }
 }
 
