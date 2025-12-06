@@ -5,7 +5,6 @@
 
 import { isSchematicData, type SchematicData } from '../types/index.js';
 
-import ExecutionModeWrapper from 'nucleation';
 
 /**
  * Schematic wrapper interface (compatible with nucleation)
@@ -214,9 +213,6 @@ export const SchematicUtils = {
     }
   },
 
-  /**
-   * ExecutionModeWrapper for building execution modes
-   */
-  ExecutionModeWrapper,
+
 } as const;
 
