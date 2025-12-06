@@ -76,7 +76,7 @@ const FileOutputNode = memo(({ id, data, selected }: NodeProps & { data: FileOut
   const inputEdge = edges.find(e => e.target === id);
   const sourceCache = inputEdge ? nodeCache[inputEdge.source] : null;
   const inputValue = sourceCache?.output;
-  const hasInput = inputEdge && sourceCache?.status === 'completed' && isDataValue(inputValue);
+  const hasInput = inputEdge && (sourceCache?.status === 'completed' || sourceCache?.status === 'cached') && isDataValue(inputValue);
 
   // Determine the category of input data
   const inputData = hasInput ? (inputValue as DataValue) : null;

@@ -24,6 +24,13 @@ const StatusIndicator = ({ status }: { status: NodeExecutionStatus }) => {
           <span>Ready</span>
         </div>
       );
+    case 'cached':
+      return (
+        <div className="flex items-center gap-1 text-[10px] text-green-400 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+          <CheckCircle className="w-3 h-3" />
+          <span>Cached</span>
+        </div>
+      );
     case 'running':
       return (
         <div className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
@@ -40,7 +47,7 @@ const StatusIndicator = ({ status }: { status: NodeExecutionStatus }) => {
       );
     case 'stale':
       return (
-        <div className="flex items-center gap-1 text-[10px] text-neutral-400 bg-neutral-500/10 px-2 py-0.5 rounded border border-neutral-500/20">
+        <div className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
           <Clock className="w-3 h-3" />
           <span>Stale</span>
         </div>
@@ -93,8 +100,9 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
     if (isExecuting) return 'border-amber-500/70 shadow-lg shadow-amber-500/20';
     switch (status) {
       case 'completed': return 'border-green-500/30';
+      case 'cached': return 'border-green-500/30';
       case 'error': return 'border-red-500/50';
-      case 'stale': return 'border-neutral-600/50';
+      case 'stale': return 'border-amber-500/40 shadow-sm shadow-amber-500/10';
       default: return 'border-neutral-800/50';
     }
   };
@@ -120,7 +128,7 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
       {isExecuting && (
         <div className="absolute inset-0 bg-amber-500/5 animate-pulse pointer-events-none rounded-xl" />
       )}
-      {status === 'completed' && (
+      {(status === 'completed' || status === 'cached') && (
         <div className="absolute inset-0 bg-green-500/5 pointer-events-none rounded-xl" />
       )}
 
@@ -128,14 +136,14 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
       <div className="px-4 py-3 bg-gradient-to-r from-green-900/30 to-neutral-900/50 border-b border-neutral-800/50 rounded-t-xl">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={`flex items-center justify-center w-7 h-7 rounded-lg ${status === 'completed' ? 'bg-green-500/30' :
+            <div className={`flex items-center justify-center w-7 h-7 rounded-lg ${(status === 'completed' || status === 'cached') ? 'bg-green-500/30' :
               isExecuting ? 'bg-amber-500/30' :
                 'bg-green-500/20'
               }`}>
               {isExecuting ? (
                 <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
               ) : (
-                <Zap className={`w-4 h-4 ${status === 'completed' ? 'text-green-300' : 'text-green-400'}`} />
+                <Zap className={`w-4 h-4 ${(status === 'completed' || status === 'cached') ? 'text-green-300' : 'text-green-400'}`} />
               )}
             </div>
             <span className="font-medium text-sm text-white truncate">
@@ -230,7 +238,7 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
                 </span>
               )}
               {outputHandles.length > 0 && (
-                <span className={`px-2 py-0.5 rounded border ${status === 'completed'
+                <span className={`px-2 py-0.5 rounded border ${(status === 'completed' || status === 'cached')
                   ? 'bg-green-500/20 text-green-300 border-green-500/30'
                   : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                   }`}>
@@ -240,18 +248,13 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
             </div>
 
             <div className="flex items-center gap-2">
-              {status === 'completed' && cache?.executionTime !== undefined && (
+              {(status === 'completed' || status === 'cached') && cache?.executionTime !== undefined && (
                 <div className="flex items-center gap-1 text-[9px] text-neutral-400">
                   <Clock className="w-2.5 h-2.5" />
                   {cache.executionTime < 1000 
                     ? `${cache.executionTime}ms` 
                     : `${(cache.executionTime / 1000).toFixed(1)}s`
                   }
-                </div>
-              )}
-              {status === 'completed' && !!cache?.output && (
-                <div className="text-[9px] text-green-400/70">
-                  Cached
                 </div>
               )}
             </div>
@@ -267,14 +270,14 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
                 <div
                   key={key}
                   data-label={key}
-                  className={`relative text-[11px] py-1.5 px-2 rounded text-right flex items-center justify-end gap-1.5 ${status === 'completed'
+                  className={`relative text-[11px] py-1.5 px-2 rounded text-right flex items-center justify-end gap-1.5 ${(status === 'completed' || status === 'cached')
                     ? 'text-green-400 bg-green-500/10 border border-green-500/20'
                     : 'text-amber-400/70 bg-amber-500/5 border border-amber-500/10'
                     }`}
                   title={port.description || `${key}: ${port.type}`}
                 >
                   {key}
-                  <div className={`w-1.5 h-1.5 rounded-full ${status === 'completed' ? 'bg-green-400' : 'bg-amber-400/50'}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${(status === 'completed' || status === 'cached') ? 'bg-green-400' : 'bg-amber-400/50'}`} />
                   <Handle
                     type="source"
                     position={Position.Right}
@@ -284,7 +287,7 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
                       right: '-19px',
                       transform: 'translateY(-50%)',
                     }}
-                    className={`!w-3 !h-3 !border-2 !border-neutral-900 ${status === 'completed' ? '!bg-green-500' : '!bg-amber-500'
+                    className={`!w-3 !h-3 !border-2 !border-neutral-900 ${(status === 'completed' || status === 'cached') ? '!bg-green-500' : '!bg-amber-500'
                       }`}
                   />
                 </div>
@@ -344,7 +347,7 @@ const CodeNode = memo(({ id, data, selected }: NodeProps & { data: CodeNodeData 
           position={Position.Right}
           id="default"
           style={{ top: '50%' }}
-          className={`!w-3 !h-3 !border-2 !border-neutral-900 ${status === 'completed' ? '!bg-green-500' : '!bg-amber-500'
+          className={`!w-3 !h-3 !border-2 !border-neutral-900 ${(status === 'completed' || status === 'cached') ? '!bg-green-500' : '!bg-amber-500'
             }`}
           title="Output"
         />

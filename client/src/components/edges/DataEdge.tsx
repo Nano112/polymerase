@@ -149,7 +149,7 @@ const DataEdge = memo(({
   const sourceCache = nodeCache[source];
   const [showPopup, setShowPopup] = useState(false);
 
-  const isReady = sourceCache?.status === 'completed';
+  const isReady = sourceCache?.status === 'completed' || sourceCache?.status === 'cached';
   const isStale = sourceCache?.status === 'stale';
   const isRunning = sourceCache?.status === 'running';
   const isError = sourceCache?.status === 'error';

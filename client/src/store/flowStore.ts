@@ -20,7 +20,7 @@ import { extractSubflowConfig } from '@polymerase/core';
 // Types
 // ============================================================================
 
-export type NodeExecutionStatus = 'idle' | 'pending' | 'running' | 'completed' | 'error' | 'stale';
+export type NodeExecutionStatus = 'idle' | 'pending' | 'running' | 'completed' | 'error' | 'stale' | 'cached';
 
 export type InputWidgetType = 
   | 'number'        // Standard number input
@@ -47,6 +47,14 @@ export interface NodeExecutionCache {
   lastExecutedAt?: number;
   executionTime?: number;  // Duration in milliseconds
   inputHash?: string;  // Hash of inputs to detect changes
+  fromCache?: boolean;  // Whether this result was reused from cache
+}
+
+export type ExecutionMode = 'manual' | 'live';
+
+export interface ExecutionSettings {
+  mode: ExecutionMode;  // 'manual' = wait for explicit run, 'live' = auto-run on input change
+  runStaleOnly: boolean;  // When running, only execute stale nodes
 }
 
 export interface FlowNode extends Node {
@@ -168,6 +176,16 @@ interface FlowState {
   setDebugMode: (enabled: boolean) => void;
   toggleDebugMode: () => void;
   
+  // Execution settings
+  executionSettings: ExecutionSettings;
+  setExecutionMode: (mode: ExecutionMode) => void;
+  setRunStaleOnly: (runStaleOnly: boolean) => void;
+  
+  // Smart execution helpers
+  getStaleNodes: () => FlowNode[];
+  getNodesToExecute: (onlyStale?: boolean) => FlowNode[];
+  markNodeCached: (nodeId: string) => void;
+  
   // Flow operations
   loadFlow: (flow: FlowData) => void;
   exportFlow: () => FlowData;
@@ -266,6 +284,12 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   isExecuting: false,
   executionLogs: [],
   debugMode: false,
+  
+  // Execution settings
+  executionSettings: {
+    mode: 'manual',
+    runStaleOnly: false,
+  },
 
   // Setters
   setFlowId: (id) => set({ flowId: id }),
@@ -276,6 +300,72 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   // Debug mode
   setDebugMode: (enabled) => set({ debugMode: enabled }),
   toggleDebugMode: () => set((state) => ({ debugMode: !state.debugMode })),
+  
+  // Execution settings
+  setExecutionMode: (mode) => set((state) => ({
+    executionSettings: { ...state.executionSettings, mode },
+  })),
+  setRunStaleOnly: (runStaleOnly) => set((state) => ({
+    executionSettings: { ...state.executionSettings, runStaleOnly },
+  })),
+  
+  // Smart execution helpers
+  getStaleNodes: () => {
+    const state = get();
+    return state.nodes.filter(n => {
+      const cache = state.nodeCache[n.id];
+      return cache?.status === 'stale' || cache?.status === 'idle' || !cache;
+    });
+  },
+  
+  getNodesToExecute: (onlyStale = false) => {
+    const state = get();
+    if (!onlyStale) {
+      return state.nodes;
+    }
+    
+    // For stale-only execution, we need to include:
+    // 1. All stale nodes
+    // 2. All nodes that depend on stale nodes (they need inputs)
+    const staleIds = new Set<string>();
+    
+    // First pass: find all stale/idle nodes
+    for (const node of state.nodes) {
+      const cache = state.nodeCache[node.id];
+      if (cache?.status === 'stale' || cache?.status === 'idle' || !cache) {
+        staleIds.add(node.id);
+      }
+    }
+    
+    // Second pass: Add all downstream nodes from stale nodes
+    for (const nodeId of Array.from(staleIds)) {
+      const downstream = getDownstreamNodes(nodeId, state.edges);
+      for (const downId of downstream) {
+        staleIds.add(downId);
+      }
+    }
+    
+    return state.nodes.filter(n => staleIds.has(n.id));
+  },
+  
+  markNodeCached: (nodeId) => {
+    const state = get();
+    const currentCache = state.nodeCache[nodeId];
+    // Preserve all metadata (executionTime, lastExecutedAt, etc.) when marking as cached
+    if (currentCache?.status === 'completed' || currentCache?.status === 'cached') {
+      set({
+        nodeCache: {
+          ...state.nodeCache,
+          [nodeId]: {
+            ...currentCache,
+            status: 'cached',
+            fromCache: true,
+            // Keep all existing metadata
+          },
+        },
+      });
+    }
+  },
 
   // React Flow handlers
   onNodesChange: (changes) => {
@@ -367,9 +457,21 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     });
     
     // For input nodes with value changes, update cache and invalidate downstream
+    // Also check if we should trigger live execution
     if (isInputNode && 'value' in data) {
       get().setNodeOutput(nodeId, { output: data.value });
       get().invalidateDownstream(nodeId);
+      
+      // Emit event for live execution if in live mode (debounced)
+      // Use setTimeout to ensure state has settled before triggering
+      setTimeout(() => {
+        const currentSettings = get().executionSettings;
+        if (currentSettings.mode === 'live') {
+          window.dispatchEvent(new CustomEvent('polymerase:liveExecutionTrigger', {
+            detail: { sourceNodeId: nodeId, type: 'input-change' }
+          }));
+        }
+      }, 50);
     } else if (shouldInvalidate) {
       get().invalidateNode(nodeId);
     }

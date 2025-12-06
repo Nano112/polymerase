@@ -484,10 +484,12 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   
   // Use viewer's own output if it has been executed (contains serialized data)
   // Otherwise fall back to source cache (for passthrough display before execution)
-  const rawOutput = viewerCache?.status === 'completed' && viewerCache?.output 
+  const viewerHasOutput = (viewerCache?.status === 'completed' || viewerCache?.status === 'cached') && viewerCache?.output;
+  const rawOutput = viewerHasOutput 
     ? viewerCache.output 
     : sourceCache?.output;
-  const hasInput = !!inputEdge && (viewerCache?.status === 'completed' || sourceCache?.status === 'completed');
+  const sourceHasOutput = sourceCache?.status === 'completed' || sourceCache?.status === 'cached';
+  const hasInput = !!inputEdge && (viewerHasOutput || sourceHasOutput);
   const isExecuting = sourceCache?.status === 'running' || sourceCache?.status === 'pending' || viewerCache?.status === 'running';
   
   // Unwrap and process the value

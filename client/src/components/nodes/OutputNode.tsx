@@ -140,7 +140,7 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
   let inputValue: unknown = null;
   
   // First try our own cache - this has the serialized SchematicData
-  if (ownCache?.status === 'completed' && ownCache?.output) {
+  if ((ownCache?.status === 'completed' || ownCache?.status === 'cached') && ownCache?.output) {
     const output = ownCache.output as Record<string, unknown>;
     inputValue = output['default'] ?? output['output'] ?? output[Object.keys(output)[0]];
   }
@@ -164,7 +164,9 @@ const OutputNode = memo(({ id, data, selected }: NodeProps & { data: OutputNodeD
     }
   }
   
-  const hasInput = (ownCache?.status === 'completed' || (inputEdge && sourceCache?.status === 'completed')) && inputValue !== null;
+  const ownHasOutput = ownCache?.status === 'completed' || ownCache?.status === 'cached';
+  const sourceHasOutput = sourceCache?.status === 'completed' || sourceCache?.status === 'cached';
+  const hasInput = (ownHasOutput || (inputEdge && sourceHasOutput)) && inputValue !== null;
   const colors = getDataColor(inputValue);
   const Icon = getDataIcon(inputValue);
   const showDownload = data.allowDownload !== false && hasInput && canDownload(inputValue);

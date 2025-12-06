@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -37,6 +38,9 @@ import {
   HelpCircle,
   Eye,
   Globe,
+  Zap,
+  RefreshCw,
+  ChevronDown,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
@@ -89,6 +93,11 @@ export function Editor() {
     canRedo,
     debugMode,
     toggleDebugMode,
+    executionSettings,
+    setExecutionMode,
+    getStaleNodes,
+    getNodesToExecute,
+    markNodeCached,
   } = useFlowStore();
 
   // Fetch flow if URL has ID
@@ -142,10 +151,18 @@ export function Editor() {
   // Clipboard for copy/paste
   const [clipboard, setClipboard] = useState<{ nodes: FlowNode[]; edges: Edge[] } | null>(null);
   
+  // Run dropdown state
+  const [showRunMenu, setShowRunMenu] = useState(false);
+  
   // Mobile states
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showMobileToolbar, setShowMobileToolbar] = useState(false);
+  
+  // Calculate stale node count
+  const staleNodes = getStaleNodes();
+  const staleCount = staleNodes.length;
+  const hasStaleNodes = staleCount > 0;
   
   // Detect mobile
   useEffect(() => {
@@ -994,7 +1011,323 @@ export function Editor() {
       setIsExecuting(false);
       setExecutingNodeId(null);
     }
-  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, executeSubflow, getExecutionOrder, findCodeChains]);
+  }, [nodes, edges, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, executeSubflow, getExecutionOrder, findCodeChains, workerClient]);
+
+  /**
+   * Run only nodes that have stale/invalidated cache
+   * This is more efficient when only some inputs have changed
+   */
+  const handleIncrementalRun = useCallback(async () => {
+    const nodesToRun = getNodesToExecute(true);
+    
+    if (nodesToRun.length === 0) {
+      addExecutionLog('[OK] All nodes are up to date, nothing to run');
+      return;
+    }
+
+    setIsExecuting(true);
+    clearExecutionLogs();
+    addExecutionLog(`Starting incremental run (${nodesToRun.length} stale nodes)...`);
+
+    // Store outputs from each node for passing to downstream nodes
+    const nodeOutputs = new Map<string, Record<string, unknown>>();
+    
+    // Pre-populate with cached outputs from nodes that don't need re-execution
+    for (const node of nodes) {
+      const cache = nodeCache[node.id];
+      if (cache?.status === 'completed' || cache?.status === 'cached') {
+        if (cache.output) {
+          nodeOutputs.set(node.id, cache.output as Record<string, unknown>);
+          // Mark as using cached value
+          markNodeCached(node.id);
+        }
+      }
+    }
+
+    try {
+      // Get execution order but filter to only stale nodes and their dependencies
+      const executionOrder = getExecutionOrder(nodes, edges);
+      const nodesToRunIds = new Set(nodesToRun.map(n => n.id));
+      
+      // Find code chains for batched execution  
+      const codeChains = findCodeChains(nodes, edges);
+      const executedChains = new Set<string>();
+      
+      // Build a map of node -> chain for quick lookup
+      const nodeToChain = new Map<string, string>();
+      for (const [chainId, nodeIds] of codeChains) {
+        for (const nodeId of nodeIds) {
+          nodeToChain.set(nodeId, chainId);
+        }
+      }
+
+      // Mark only stale nodes as pending
+      for (const node of nodesToRun) {
+        setNodeExecutionStatus(node.id, 'pending');
+      }
+
+      console.log(`[Incremental] Running ${nodesToRun.length} nodes:`, nodesToRun.map(n => n.id));
+
+      // Process nodes in topological order
+      for (const node of executionOrder) {
+        // Skip nodes that don't need to be executed
+        if (!nodesToRunIds.has(node.id)) {
+          // But make sure we have its cached output available
+          const cache = nodeCache[node.id];
+          if (cache?.output && !nodeOutputs.has(node.id)) {
+            nodeOutputs.set(node.id, cache.output as Record<string, unknown>);
+          }
+          continue;
+        }
+
+        console.log(`[Incremental] Processing node: ${node.id} type: ${node.type}`);
+        
+        // Handle input nodes - they just output their value
+        if (node.type?.includes('input') && !node.type?.includes('schematic')) {
+          const output = { default: node.data.value };
+          nodeOutputs.set(node.id, output);
+          setNodeExecutionStatus(node.id, 'completed', output);
+          continue;
+        }
+
+        // Handle code nodes
+        if (node.type === 'code') {
+          const chainId = nodeToChain.get(node.id);
+          
+          // Skip if we already executed this chain
+          if (chainId && executedChains.has(chainId)) {
+            continue;
+          }
+          
+          if (chainId) {
+            executedChains.add(chainId);
+          }
+          
+          // Execute single code node
+          const code = node.data.code;
+          
+          if (!code) {
+            addExecutionLog(`[WARN] Code node "${node.data.label || node.id}" has no script, skipping`);
+            setNodeExecutionStatus(node.id, 'error', undefined, createSimpleError('No script'));
+            continue;
+          }
+
+          // Gather inputs from connected upstream nodes (use cached values when available)
+          const inputValues: Record<string, unknown> = {};
+          const incomingEdges = edges.filter(e => e.target === node.id);
+          
+          for (const edge of incomingEdges) {
+            const sourceOutput = nodeOutputs.get(edge.source);
+            
+            if (sourceOutput) {
+              const inputName = edge.targetHandle || 'default';
+              const outputKey = edge.sourceHandle || inputName;
+              let value = sourceOutput[outputKey];
+              
+              if (value === undefined) {
+                const outputKeys = Object.keys(sourceOutput);
+                if (outputKeys.length === 1) {
+                  value = sourceOutput[outputKeys[0]];
+                } else {
+                  value = sourceOutput['default'];
+                }
+              }
+              
+              inputValues[inputName] = value;
+            }
+          }
+
+          const returnHandles = true;
+
+          // Mark as running
+          setExecutingNodeId(node.id);
+          setNodeExecutionStatus(node.id, 'running');
+          const nodeLabel = node.data.label || 'Code';
+          addExecutionLog(`Executing "${nodeLabel}"...`);
+
+          // Execute with timing
+          const startTime = Date.now();
+          const result = await executeScript(code, inputValues, { returnHandles });
+          const executionTime = Date.now() - startTime;
+
+          if (result.success) {
+            let finalResult: Record<string, unknown> = {};
+            
+            if (returnHandles && result.schematicHandles && Object.keys(result.schematicHandles).length > 0) {
+              for (const [key, handleId] of Object.entries(result.schematicHandles)) {
+                finalResult[key] = { _schematicHandle: handleId };
+              }
+              
+              if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
+              }
+            } else if (result.schematics && Object.keys(result.schematics).length > 0) {
+              for (const [key, value] of Object.entries(result.schematics)) {
+                if (value) {
+                  finalResult[key] = value;
+                }
+              }
+              
+              if (Object.keys(finalResult).length === 1 && !('default' in finalResult)) {
+                finalResult['default'] = finalResult[Object.keys(finalResult)[0]];
+              }
+            } else {
+              finalResult = result.result || {};
+            }
+
+            nodeOutputs.set(node.id, finalResult);
+            setNodeExecutionStatus(node.id, 'completed', finalResult, undefined, executionTime);
+            addExecutionLog(`[OK] "${nodeLabel}" completed in ${executionTime}ms`);
+          } else {
+            const executionError = result.error 
+              ? parseExecutionError(result.error, node.data.code)
+              : createSimpleError('Unknown execution error');
+            setNodeExecutionStatus(node.id, 'error', undefined, executionError);
+            addExecutionLog(`[ERROR] "${nodeLabel}": ${executionError.message}`);
+            break;
+          }
+        }
+
+        // Handle viewer nodes - only update if this viewer is in the stale list
+        if (node.type === 'viewer') {
+          // Skip viewer if it's not stale (its source hasn't changed)
+          if (!nodesToRunIds.has(node.id)) {
+            // Make sure its output is available for downstream
+            const cache = nodeCache[node.id];
+            if (cache?.output && !nodeOutputs.has(node.id)) {
+              nodeOutputs.set(node.id, cache.output as Record<string, unknown>);
+            }
+            continue;
+          }
+          
+          const incomingEdge = edges.find(e => e.target === node.id);
+          if (incomingEdge) {
+            const sourceOutput = nodeOutputs.get(incomingEdge.source);
+            if (sourceOutput) {
+              const handleKey = incomingEdge.sourceHandle || 'default';
+              let viewerValue: unknown = sourceOutput;
+              
+              if (handleKey in sourceOutput) {
+                viewerValue = sourceOutput[handleKey];
+              } else if ('default' in sourceOutput) {
+                viewerValue = sourceOutput['default'];
+              } else {
+                const keys = Object.keys(sourceOutput);
+                if (keys.length === 1) {
+                  viewerValue = sourceOutput[keys[0]];
+                }
+              }
+              
+              // For viewers: if we have a handle, fetch serialized data from worker
+              if (viewerValue && typeof viewerValue === 'object' && '_schematicHandle' in viewerValue) {
+                const handleObj = viewerValue as { _schematicHandle: string };
+                const handleId = handleObj._schematicHandle;
+                
+                if (workerClient) {
+                  try {
+                    const serializedData = await workerClient.getData(handleId);
+                    if (serializedData) {
+                      viewerValue = serializedData;
+                    }
+                  } catch (err) {
+                    console.error(`Failed to fetch data for handle ${handleId}:`, err);
+                  }
+                }
+              }
+              
+              setNodeExecutionStatus(node.id, 'completed', { default: viewerValue });
+              
+              const viewerData = node.data as { passthrough?: boolean };
+              if (viewerData.passthrough) {
+                const originalValue = sourceOutput[incomingEdge.sourceHandle || 'default'] || sourceOutput['default'];
+                nodeOutputs.set(node.id, { output: originalValue, default: originalValue });
+              }
+            }
+          }
+        }
+
+        // Handle output nodes - only update if stale
+        if (node.type === 'output' || node.type === 'file_output') {
+          // Skip if not stale
+          if (!nodesToRunIds.has(node.id)) {
+            const cache = nodeCache[node.id];
+            if (cache?.output && !nodeOutputs.has(node.id)) {
+              nodeOutputs.set(node.id, cache.output as Record<string, unknown>);
+            }
+            continue;
+          }
+          
+          const incomingEdge = edges.find(e => e.target === node.id);
+          if (incomingEdge) {
+            const sourceOutput = nodeOutputs.get(incomingEdge.source);
+            if (sourceOutput) {
+              const handleKey = incomingEdge.sourceHandle || 'default';
+              let outputValue: unknown = sourceOutput;
+              
+              if (handleKey in sourceOutput) {
+                outputValue = sourceOutput[handleKey];
+              } else if ('default' in sourceOutput) {
+                outputValue = sourceOutput['default'];
+              } else {
+                const keys = Object.keys(sourceOutput);
+                if (keys.length === 1) {
+                  outputValue = sourceOutput[keys[0]];
+                }
+              }
+              
+              if (outputValue && typeof outputValue === 'object' && '_schematicHandle' in outputValue) {
+                const handleObj = outputValue as { _schematicHandle: string };
+                const handleId = handleObj._schematicHandle;
+                
+                if (workerClient) {
+                  try {
+                    const serializedData = await workerClient.getData(handleId);
+                    if (serializedData) {
+                      outputValue = serializedData;
+                    }
+                  } catch (err) {
+                    console.error(`Failed to fetch data for handle ${handleId}:`, err);
+                  }
+                }
+              }
+              
+              setNodeExecutionStatus(node.id, 'completed', { output: outputValue, default: outputValue });
+              nodeOutputs.set(node.id, { output: outputValue, default: outputValue });
+            }
+          }
+        }
+      }
+
+      addExecutionLog('[OK] Incremental execution complete');
+
+    } catch (error) {
+      const err = error as Error;
+      addExecutionLog(`[ERROR] ${err.message}`);
+      const execError = parseExecutionError(err);
+      for (const node of nodesToRun.filter(n => n.type === 'code')) {
+        setNodeExecutionStatus(node.id, 'error', undefined, execError);
+      }
+    } finally {
+      setIsExecuting(false);
+      setExecutingNodeId(null);
+    }
+  }, [nodes, edges, nodeCache, setIsExecuting, clearExecutionLogs, addExecutionLog, setNodeExecutionStatus, setExecutingNodeId, executeScript, getExecutionOrder, findCodeChains, getNodesToExecute, markNodeCached, workerClient]);
+
+  // Listen for live execution triggers (when execution mode is 'live')
+  useEffect(() => {
+    const handleLiveExecution = (event: CustomEvent) => {
+      console.log('[Live] Execution triggered by:', event.detail);
+      // Use incremental run for live execution
+      if (!isExecuting) {
+        handleIncrementalRun();
+      }
+    };
+
+    window.addEventListener('polymerase:liveExecutionTrigger', handleLiveExecution as EventListener);
+    return () => {
+      window.removeEventListener('polymerase:liveExecutionTrigger', handleLiveExecution as EventListener);
+    };
+  }, [isExecuting, handleIncrementalRun]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstance.current = instance;
@@ -1035,8 +1368,8 @@ export function Editor() {
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   
-  // Calculate cache stats
-  const completedCount = Object.values(nodeCache).filter(c => c.status === 'completed').length;
+  // Calculate cache stats - include both completed and cached nodes as "ready"
+  const completedCount = Object.values(nodeCache).filter(c => c.status === 'completed' || c.status === 'cached').length;
   const totalNodes = nodes.length;
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -1082,7 +1415,7 @@ export function Editor() {
       tabIndex={0}
     >
       {/* Top Bar - Responsive */}
-      <div className="h-14 bg-neutral-900/80 backdrop-blur-xl border-b border-neutral-800/50 flex items-center justify-between px-2 sm:px-4 flex-shrink-0 mobile-header">
+      <div className="h-14 bg-neutral-900/80 backdrop-blur-xl border-b border-neutral-800/50 flex items-center justify-between px-2 sm:px-4 flex-shrink-0 mobile-header z-50 relative">
         {/* Left: Flow info */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
           {/* Mobile menu button */}
@@ -1210,9 +1543,17 @@ export function Editor() {
             {totalNodes > 0 && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
                 <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${completedCount === totalNodes ? 'bg-green-500' : 'bg-neutral-600'}`} />
+                  <div className={`w-2 h-2 rounded-full ${
+                    hasStaleNodes ? 'bg-amber-500' : 
+                    completedCount === totalNodes ? 'bg-green-500' : 'bg-neutral-600'
+                  }`} />
                   <span className="text-xs text-neutral-400">
                     {completedCount}/{totalNodes} computed
+                    {hasStaleNodes && (
+                      <span className="text-amber-400 ml-1">
+                        ({staleCount} stale)
+                      </span>
+                    )}
                   </span>
                 </div>
                 {completedCount > 0 && (
@@ -1268,6 +1609,19 @@ export function Editor() {
           {/* Run & Console buttons - Desktop only, FAB on mobile */}
           {!isMobile && (
             <div className="flex items-center gap-1.5">
+              {/* Live mode toggle */}
+              <button
+                onClick={() => setExecutionMode(executionSettings.mode === 'live' ? 'manual' : 'live')}
+                className={`p-2 rounded-lg transition-colors ${
+                  executionSettings.mode === 'live'
+                    ? 'text-amber-400 bg-amber-500/20 hover:bg-amber-500/30'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
+                }`}
+                title={`Live Mode (${executionSettings.mode === 'live' ? 'On' : 'Off'}) - Auto-run when inputs change`}
+              >
+                <Zap className="w-4 h-4" />
+              </button>
+              
               {/* Console button */}
               <button
                 onClick={() => setShowExecution(true)}
@@ -1277,22 +1631,135 @@ export function Editor() {
                 <Terminal className="w-4 h-4" />
               </button>
               
-              {/* Run button */}
-              <button
-                onClick={handleQuickRun}
-                disabled={isExecuting}
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-all
-                  ${isExecuting 
-                    ? 'bg-amber-500 cursor-wait' 
-                    : 'bg-green-600 hover:bg-green-500'
-                  }
-                `}
-                title="Run Flow"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                {isExecuting ? 'Running...' : 'Run'}
-              </button>
+              {/* Run Stale button - only show when there are stale nodes */}
+              {hasStaleNodes && !isExecuting && (
+                <button
+                  onClick={handleIncrementalRun}
+                  disabled={isExecuting}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium transition-all bg-amber-600 hover:bg-amber-500"
+                  title={`Run ${staleCount} stale node(s) only`}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="hidden lg:inline">Run Stale</span>
+                  <span className="text-amber-200 text-xs bg-amber-700/50 px-1.5 py-0.5 rounded">
+                    {staleCount}
+                  </span>
+                </button>
+              )}
+              
+              {/* Run button with dropdown */}
+              <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="flex">
+                  <button
+                    onClick={handleQuickRun}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    disabled={isExecuting}
+                    className={`
+                      flex items-center gap-2 px-4 py-2 rounded-l-lg text-white text-sm font-medium transition-all
+                      ${isExecuting 
+                        ? 'bg-amber-500 cursor-wait' 
+                        : 'bg-green-600 hover:bg-green-500'
+                      }
+                    `}
+                    title="Run All Nodes"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    {isExecuting ? 'Running...' : 'Run All'}
+                  </button>
+                  <button
+                    onClick={() => setShowRunMenu(!showRunMenu)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    disabled={isExecuting}
+                    className={`
+                      px-2 py-2 rounded-r-lg text-white text-sm font-medium transition-all border-l border-green-700/50
+                      ${isExecuting 
+                        ? 'bg-amber-500 cursor-wait' 
+                        : 'bg-green-600 hover:bg-green-500'
+                      }
+                    `}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                {/* Dropdown menu - rendered in portal to avoid z-index/event issues */}
+                {showRunMenu && createPortal(
+                  <div 
+                    className="fixed inset-0 z-[9999]" 
+                    onClick={() => setShowRunMenu(false)}
+                  >
+                    <div 
+                      className="fixed right-4 top-16 w-56 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl overflow-hidden"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-1">
+                        <button
+                          onClick={() => {
+                            handleQuickRun();
+                            setShowRunMenu(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-md transition-colors"
+                        >
+                          <Play className="w-4 h-4 text-green-400" />
+                          <div className="flex-1 text-left">
+                            <div className="font-medium">Run All</div>
+                            <div className="text-xs text-neutral-500">Execute entire flow</div>
+                          </div>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            handleIncrementalRun();
+                            setShowRunMenu(false);
+                          }}
+                          disabled={!hasStaleNodes}
+                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <RefreshCw className="w-4 h-4 text-amber-400" />
+                          <div className="flex-1 text-left">
+                            <div className="font-medium">Run Stale Only</div>
+                            <div className="text-xs text-neutral-500">
+                              {hasStaleNodes ? `${staleCount} node(s) need update` : 'All nodes up to date'}
+                            </div>
+                          </div>
+                        </button>
+                        
+                        <div className="border-t border-neutral-800 my-1" />
+                        
+                        <div className="px-3 py-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Zap className={`w-4 h-4 ${executionSettings.mode === 'live' ? 'text-amber-400' : 'text-neutral-500'}`} />
+                              <span className="text-sm text-neutral-300">Live Mode</span>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExecutionMode(executionSettings.mode === 'live' ? 'manual' : 'live');
+                              }}
+                              className={`
+                                relative w-11 h-6 rounded-full transition-colors overflow-hidden
+                                ${executionSettings.mode === 'live' ? 'bg-amber-500' : 'bg-neutral-700'}
+                              `}
+                            >
+                              <span
+                                className={`
+                                  absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm
+                                  ${executionSettings.mode === 'live' ? 'translate-x-5' : 'translate-x-0'}
+                                `}
+                              />
+                            </button>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-1">
+                            Auto-run when inputs change
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1413,9 +1880,10 @@ export function Editor() {
               className="!bg-neutral-900 !border-neutral-800 !rounded-xl !shadow-xl"
               nodeColor={(node) => {
                 const cache = nodeCache[node.id];
-                if (cache?.status === 'completed') return '#22c55e';
+                if (cache?.status === 'completed' || cache?.status === 'cached') return '#22c55e';
                 if (cache?.status === 'running') return '#f59e0b';
                 if (cache?.status === 'error') return '#ef4444';
+                if (cache?.status === 'stale') return '#eab308'; // Yellow for stale
                 
                 switch (node.type) {
                   case 'code': return '#22c55e40';
@@ -1451,6 +1919,11 @@ export function Editor() {
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-green-500" />
                   Data ready
+                </span>
+                <span className="text-neutral-700">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Stale (needs re-run)
                 </span>
               </div>
             </Panel>
