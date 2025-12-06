@@ -2,10 +2,12 @@ import { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { Handle, Position, type NodeProps, NodeResizer } from '@xyflow/react';
 import { 
   Eye, Box, Hash, Type, ToggleLeft, ArrowRight,
-  Image, Table, FileJson, List, Binary, AlertCircle
+  Image, Table, FileJson, List, Binary, AlertCircle,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { useShallow } from 'zustand/react/shallow';
+import { NodeContextMenu, NodeContextMenuItem, NodeContextMenuSeparator } from './NodeContextMenu';
 import { 
   isSchematicData, 
   isImageData, 
@@ -27,6 +29,7 @@ interface ViewerNodeData {
   passthrough?: boolean;
   width?: number;
   height?: number;
+  isResizable?: boolean;
 }
 
 type ValueType = 
@@ -480,7 +483,9 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
   // Cache for persistence during re-execution
   const lastValueRef = useRef<unknown>(null);
   
-  const isResized = !!(width && height);
+  const isResized = !!((width && height) || (data.width && data.height));
+  const currentWidth = width || data.width;
+  const currentHeight = height || data.height;
   
   // Use viewer's own output if it has been executed (contains serialized data)
   // Otherwise fall back to source cache (for passthrough display before execution)
@@ -507,6 +512,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
     : 'null';
   
   const passthrough = data.passthrough ?? false;
+  const isResizable = data.isResizable ?? false;
   
   // Update viewer's output cache when passthrough is enabled and we have input
   // This makes the output available to downstream nodes
@@ -517,10 +523,17 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
     }
   }, [passthrough, hasInput, inputValue, id, setNodeOutput]);
 
-  const togglePassthrough = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const togglePassthrough = useCallback(() => {
     updateNodeData(id, { passthrough: !passthrough });
   }, [id, passthrough, updateNodeData]);
+
+  const toggleResizable = useCallback(() => {
+    updateNodeData(id, { isResizable: !isResizable });
+  }, [id, isResizable, updateNodeData]);
+
+  const handleResizeEnd = useCallback((_event: any, params: { width: number; height: number }) => {
+    updateNodeData(id, { width: params.width, height: params.height });
+  }, [id, updateNodeData]);
 
   const TypeIcon = getTypeIcon(valueType);
   const typeColor = getTypeColor(valueType);
@@ -593,15 +606,16 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
       <NodeResizer
         minWidth={180}
         minHeight={120}
-        isVisible={selected || isHovered}
+        isVisible={isResizable && (selected || isHovered)}
         lineClassName="!border-pink-500"
         handleClassName="!w-2 !h-2 !bg-pink-500 !border-pink-600"
+        onResizeEnd={handleResizeEnd}
       />
       <div
         className={`
           relative rounded-xl overflow-visible
           bg-neutral-900 flex flex-col
-          border transition-all duration-200
+          border transition-all duration-200 group
           ${isResized ? 'w-full h-full' : 'min-w-[180px] max-w-[280px]'}
           ${selected 
             ? 'border-pink-500/50 shadow-lg shadow-pink-500/10' 
@@ -612,6 +626,7 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
                 : 'border-neutral-800/50'
           }
         `}
+        style={isResized ? { width: currentWidth, height: currentHeight } : undefined}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={() => selectNode(id)}
@@ -639,20 +654,41 @@ const ViewerNode = memo(({ id, data, selected, width, height }: NodeProps & { da
               )}
             </div>
             
-            {/* Passthrough toggle */}
-            <button
-              onClick={togglePassthrough}
-              className={`
-                p-1 rounded transition-colors flex items-center gap-1
-                ${passthrough 
-                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
-                  : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
-                }
-              `}
-              title={passthrough ? 'Output enabled (click to disable)' : 'Click to enable output relay'}
-            >
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            <div className="flex items-center gap-1">
+              {/* Passthrough toggle */}
+              <button
+                onClick={togglePassthrough}
+                className={`
+                  p-1 rounded transition-colors flex items-center gap-1
+                  ${passthrough 
+                    ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                  }
+                `}
+                title={passthrough ? 'Output enabled (click to disable)' : 'Click to enable output relay'}
+              >
+                <ArrowRight className="w-3 h-3" />
+              </button>
+
+              {/* Context Menu */}
+              <NodeContextMenu>
+                <NodeContextMenuItem 
+                  icon={ArrowRight} 
+                  onClick={togglePassthrough}
+                  checked={passthrough}
+                >
+                  Passthrough
+                </NodeContextMenuItem>
+                <NodeContextMenuSeparator />
+                <NodeContextMenuItem 
+                  icon={isResizable ? Minimize2 : Maximize2} 
+                  onClick={toggleResizable}
+                  checked={isResizable}
+                >
+                  Resizable
+                </NodeContextMenuItem>
+              </NodeContextMenu>
+            </div>
           </div>
         </div>
 

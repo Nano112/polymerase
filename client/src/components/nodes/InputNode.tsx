@@ -4,12 +4,13 @@
  */
 
 import { memo, useCallback, useState } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps, NodeResizer } from '@xyflow/react';
 import { 
   Hash, Type, ToggleLeft, List, Lock, Unlock, Sliders,
-  CheckCircle, Settings
+  CheckCircle, Settings, Maximize2, Minimize2
 } from 'lucide-react';
 import { useFlowStore, type InputWidgetType } from '../../store/flowStore';
+import { NodeContextMenu, NodeContextMenuItem } from './NodeContextMenu';
 
 export type DataType = 'number' | 'string' | 'boolean';
 
@@ -27,6 +28,9 @@ interface InputNodeData {
   description?: string;
   // Legacy support
   inputType?: 'number' | 'text' | 'boolean';
+  width?: number;
+  height?: number;
+  isResizable?: boolean;
 }
 
 // Widget options per data type
@@ -72,6 +76,17 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
   
   const isConstant = data.isConstant ?? false;
   const availableWidgets = widgetOptionsForType[dataType] || [];
+  
+  const isResizable = data.isResizable ?? false;
+  const isResized = !!(data.width && data.height);
+
+  const toggleResizable = useCallback(() => {
+    updateNodeData(id, { isResizable: !isResizable });
+  }, [id, isResizable, updateNodeData]);
+
+  const handleResizeEnd = useCallback((_event: any, params: { width: number; height: number }) => {
+    updateNodeData(id, { width: params.width, height: params.height });
+  }, [id, updateNodeData]);
 
   const handleValueChange = useCallback((newValue: unknown) => {
     updateNodeData(id, { value: newValue });
@@ -189,8 +204,11 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
           <textarea
             value={String(data.value ?? '')}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-none nodrag"
-            rows={3}
+            className={`
+              w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-purple-500 resize-none nodrag
+              ${isResized ? 'h-full' : ''}
+            `}
+            rows={isResized ? undefined : 3}
             placeholder={data.placeholder || 'Enter text...'}
           />
         );
@@ -209,136 +227,159 @@ const InputNode = memo(({ id, data, selected, type }: NodeProps & { data: InputN
   };
 
   return (
-    <div
-      className={`
-        relative min-w-[180px] max-w-[240px] rounded-xl overflow-visible
-        bg-neutral-900/80 backdrop-blur-sm
-        border transition-all duration-200
-        ${selected 
-          ? `${colors.border} shadow-lg` 
-          : isHovered 
-            ? 'border-neutral-600/50' 
-            : colors.border
-        }
-      `}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => selectNode(id)}
-    >
-      {/* Ready indicator glow */}
-      {isReady && (
-        <div className="absolute inset-0 bg-green-500/5 pointer-events-none rounded-xl" />
-      )}
+    <>
+      <NodeResizer
+        minWidth={180}
+        minHeight={120}
+        isVisible={isResizable && (selected || isHovered)}
+        lineClassName="!border-pink-500"
+        handleClassName="!w-2 !h-2 !bg-pink-500 !border-pink-600"
+        onResizeEnd={handleResizeEnd}
+      />
+      <div
+        className={`
+          relative rounded-xl overflow-visible
+          bg-neutral-900/80 backdrop-blur-sm
+          border transition-all duration-200
+          ${isResized ? 'flex flex-col' : 'min-w-[180px] max-w-[240px]'}
+          ${selected 
+            ? `${colors.border} shadow-lg` 
+            : isHovered 
+              ? 'border-neutral-600/50' 
+              : colors.border
+          }
+        `}
+        style={isResized ? { width: data.width, height: data.height } : undefined}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={() => selectNode(id)}
+      >
+        {/* Ready indicator glow */}
+        {isReady && (
+          <div className="absolute inset-0 bg-green-500/5 pointer-events-none rounded-xl" />
+        )}
 
-      {/* Header */}
-      <div className={`px-3 py-2.5 bg-gradient-to-r ${colors.gradient} border-b border-neutral-800/50 rounded-t-xl`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${colors.bg}`}>
-              {isReady ? (
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              ) : (
-                <Icon className={`w-3.5 h-3.5 ${colors.text}`} />
-              )}
-            </div>
-            <span className="font-medium text-xs text-white truncate">
-              {data.label || `${dataType.charAt(0).toUpperCase() + dataType.slice(1)} Input`}
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-1">
-            {/* Widget type selector (if multiple options) */}
-            {availableWidgets.length > 1 && (
-              <div className="relative">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowSettings(!showSettings);
-                  }}
-                  className="p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
-                  title="Change widget type"
-                >
-                  <Settings className="w-3 h-3" />
-                </button>
-                
-                {showSettings && (
-                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden">
-                    {availableWidgets.map((widget) => (
-                      <button
-                        key={widget.value}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleWidgetTypeChange(widget.value);
-                        }}
-                        className={`
-                          w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors
-                          ${widgetType === widget.value 
-                            ? 'bg-purple-500/20 text-purple-300' 
-                            : 'text-neutral-400 hover:bg-neutral-700 hover:text-white'
-                          }
-                        `}
-                      >
-                        <widget.icon className="w-3 h-3" />
-                        {widget.label}
-                      </button>
-                    ))}
-                  </div>
+        {/* Header */}
+        <div className={`px-3 py-2.5 bg-gradient-to-r ${colors.gradient} border-b border-neutral-800/50 rounded-t-xl`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className={`flex items-center justify-center w-6 h-6 rounded-lg ${colors.bg}`}>
+                {isReady ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                ) : (
+                  <Icon className={`w-3.5 h-3.5 ${colors.text}`} />
                 )}
               </div>
-            )}
+              <span className="font-medium text-xs text-white truncate">
+                {data.label || `${dataType.charAt(0).toUpperCase() + dataType.slice(1)} Input`}
+              </span>
+            </div>
             
-            {/* Constant toggle */}
-            <button
-              onClick={toggleConstant}
-              className={`
-                p-1 rounded transition-colors
-                ${isConstant 
-                  ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' 
-                  : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
-                }
-              `}
-              title={isConstant ? 'Constant (not exposed in API)' : 'Exposed (visible in API)'}
-            >
-              {isConstant ? (
-                <Lock className="w-3 h-3" />
-              ) : (
-                <Unlock className="w-3 h-3" />
+            <div className="flex items-center gap-1">
+              {/* Widget type selector (if multiple options) */}
+              {availableWidgets.length > 1 && (
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSettings(!showSettings);
+                    }}
+                    className="p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
+                    title="Change widget type"
+                  >
+                    <Settings className="w-3 h-3" />
+                  </button>
+                  
+                  {showSettings && (
+                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden">
+                      {availableWidgets.map((widget) => (
+                        <button
+                          key={widget.value}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleWidgetTypeChange(widget.value);
+                          }}
+                          className={`
+                            w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors
+                            ${widgetType === widget.value 
+                              ? 'bg-purple-500/20 text-purple-300' 
+                              : 'text-neutral-400 hover:bg-neutral-700 hover:text-white'
+                            }
+                          `}
+                        >
+                          <widget.icon className="w-3 h-3" />
+                          {widget.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
-            </button>
+              
+              {/* Constant toggle */}
+              <button
+                onClick={toggleConstant}
+                className={`
+                  p-1 rounded transition-colors
+                  ${isConstant 
+                    ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' 
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                  }
+                `}
+                title={isConstant ? 'Constant (not exposed in API)' : 'Exposed (visible in API)'}
+              >
+                {isConstant ? (
+                  <Lock className="w-3 h-3" />
+                ) : (
+                  <Unlock className="w-3 h-3" />
+                )}
+              </button>
+
+              {/* Context Menu */}
+              <NodeContextMenu>
+                <NodeContextMenuItem 
+                  icon={isResizable ? Minimize2 : Maximize2} 
+                  onClick={toggleResizable}
+                  checked={isResizable}
+                >
+                  Resizable
+                </NodeContextMenuItem>
+              </NodeContextMenu>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Widget Content */}
-      <div className="p-3">
-        {renderWidget()}
-        
-        {/* Description */}
-        {data.description && (
-          <p className="mt-2 text-[10px] text-neutral-500">{data.description}</p>
-        )}
-        
-        {/* Constant badge */}
-        {isConstant && (
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-            <Lock className="w-2.5 h-2.5" />
-            <span>Constant</span>
-          </div>
-        )}
-      </div>
+        {/* Widget Content */}
+        <div className={`p-3 ${isResized ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
+          {renderWidget()}
+          
+          {/* Description */}
+          {data.description && (
+            <p className="mt-2 text-[10px] text-neutral-500">{data.description}</p>
+          )}
+          
+          {/* Constant badge */}
+          {isConstant && (
+            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              <Lock className="w-2.5 h-2.5" />
+              <span>Constant</span>
+            </div>
+          )}
+        </div>
 
-      {/* Output Handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="output"
-        style={{ right: '-11px', top: '50%', transform: 'translateY(-50%)' }}
-        className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
-          isReady ? '!bg-green-500' : '!bg-purple-500'
-        }`}
-        title={`${data.label || dataType} output`}
-      />
-    </div>
+        {/* Output Handle */}
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-11px', top: '50%', transform: 'translateY(-50%)' }}
+          className={`!w-3 !h-3 !border-2 !border-neutral-900 ${
+            isReady ? '!bg-green-500' : '!bg-purple-500'
+          }`}
+          title={`${data.label || dataType} output`}
+        />
+      </div>
+    </>
   );
 });
 

@@ -62,6 +62,8 @@ export interface FlowNode extends Node {
     label?: string;
     code?: string;
     value?: unknown;
+    width?: number;
+    height?: number;
     io?: IODefinition;
     config?: Record<string, unknown>;
     // Input node specific
@@ -87,6 +89,7 @@ export interface FlowNode extends Node {
     flowId?: string;           // Reference to source flow
     flowDefinition?: FlowData; // Embedded flow definition
     expanded?: boolean;        // Whether subflow internals are shown
+    isResizable?: boolean;    // Whether viewer node is resizable
     subflowConfig?: {          // Subflow port configuration
       nodeName: string;
       category?: string;
