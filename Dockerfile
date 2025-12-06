@@ -16,8 +16,8 @@ COPY client/package.json ./client/package.json
 # COPY schematic-renderer-1.1.3.tgz ./client/schematic-renderer-1.1.3.tgz
 
 # DO the copy version agnostic 
-COPY schematic-renderer-*.tgz ./schematic-renderer.tgz
-COPY schematic-renderer-*.tgz ./client/schematic-renderer.tgz
+COPY schematic-renderer-1.1.6.tgz ./schematic-renderer-1.1.6.tgz
+COPY schematic-renderer-1.1.6.tgz ./client/schematic-renderer-1.1.6.tgz
 # Install dependencies (skip postinstall since source files aren't available yet)
 RUN bun install --ignore-scripts
 
