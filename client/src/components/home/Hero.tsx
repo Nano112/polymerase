@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import anime from 'animejs';
 import { Zap, Book } from 'lucide-react';
-// import { MockFlowGraph } from './MockFlowGraph';
+import { MockFlowGraph } from './MockFlowGraph';
 import { AnimatedLogo } from './AnimatedLogo';
 
 export function Hero() {
@@ -112,11 +112,7 @@ export function Hero() {
         <div className="hero-element w-full max-w-4xl relative hero-card" style={{ transformStyle: 'preserve-3d' }}>
           {/* Glow behind card */}
           <div className="absolute -inset-4 bg-gradient-to-b from-green-500/10 via-transparent to-transparent rounded-3xl blur-2xl opacity-50" />
-          
-
-
-            {/* <MockFlowGraph /> */}
-              
+            <MockFlowGraph />
         </div>
       </div>
     </section>
