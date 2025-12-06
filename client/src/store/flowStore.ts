@@ -140,6 +140,7 @@ interface FlowState {
   executingNodeId: string | null;
   isExecuting: boolean;
   executionLogs: string[];
+  liveExecutionTimer: ReturnType<typeof setTimeout> | null;
   
   // UI state
   selectedNodeId: string | null;
@@ -286,6 +287,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   selectedNodeId: null,
   isExecuting: false,
   executionLogs: [],
+  liveExecutionTimer: null,
   debugMode: false,
   
   // Execution settings
@@ -466,15 +468,22 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       get().invalidateDownstream(nodeId);
       
       // Emit event for live execution if in live mode (debounced)
-      // Use setTimeout to ensure state has settled before triggering
-      setTimeout(() => {
+      const currentTimer = get().liveExecutionTimer;
+      if (currentTimer) {
+        clearTimeout(currentTimer);
+      }
+
+      const timer = setTimeout(() => {
         const currentSettings = get().executionSettings;
         if (currentSettings.mode === 'live') {
           window.dispatchEvent(new CustomEvent('polymerase:liveExecutionTrigger', {
             detail: { sourceNodeId: nodeId, type: 'input-change' }
           }));
         }
-      }, 50);
+        set({ liveExecutionTimer: null });
+      }, 300);
+      
+      set({ liveExecutionTimer: timer });
     } else if (shouldInvalidate) {
       get().invalidateNode(nodeId);
     }

@@ -67,6 +67,10 @@ export async function createContextProviders(
   (SchematicClass as any).SchematicBuilder = nucleation.SchematicBuilderWrapper;
   // @ts-ignore
   (SchematicClass as any).ExecutionMode = nucleation.ExecutionModeWrapper;
+    // @ts-ignore
+  (SchematicClass as any).BlockPosition = nucleation.BlockPosition;
+      // @ts-ignore
+  (SchematicClass as any).DefinitionRegion = nucleation.DefinitionRegionWrapper;
 
   console.log('⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡');
   console.log('Schematic provider initialized with Nucleation WASM.');

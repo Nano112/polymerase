@@ -524,7 +524,15 @@ export function Editor() {
         
         // Handle input nodes - they just output their value
         if (node.type?.includes('input') && !node.type?.includes('schematic')) {
-          const output = { default: node.data.value };
+          let outputValue = node.data.value;
+          let output: Record<string, unknown> = { default: outputValue };
+
+          // Special handling for file inputs
+          if (node.type === 'file_input') {
+             outputValue = (node.data as any).fileData;
+             output = { output: outputValue, default: outputValue };
+          }
+
           nodeOutputs.set(node.id, output);
           setNodeExecutionStatus(node.id, 'completed', output);
           continue;
@@ -1084,7 +1092,15 @@ export function Editor() {
         
         // Handle input nodes - they just output their value
         if (node.type?.includes('input') && !node.type?.includes('schematic')) {
-          const output = { default: node.data.value };
+          let outputValue = node.data.value;
+          let output: Record<string, unknown> = { default: outputValue };
+
+          // Special handling for file inputs
+          if (node.type === 'file_input') {
+             outputValue = (node.data as any).fileData;
+             output = { output: outputValue, default: outputValue };
+          }
+
           nodeOutputs.set(node.id, output);
           setNodeExecutionStatus(node.id, 'completed', output);
           continue;
