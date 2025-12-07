@@ -803,45 +803,71 @@ export function Editor() {
             const sourceOutput = nodeOutputs.get(incomingEdge.source);
             console.log(`[Viewer] Source output from ${incomingEdge.source}:`, sourceOutput);
             if (sourceOutput) {
-              // Unwrap to get the actual value - prefer sourceHandle, then 'default', then first key
-              const handleKey = incomingEdge.sourceHandle || 'default';
-              let viewerValue: unknown = sourceOutput;
-              
-              if (handleKey in sourceOutput) {
-                viewerValue = sourceOutput[handleKey];
-              } else if ('default' in sourceOutput) {
-                viewerValue = sourceOutput['default'];
+              // Strict output selection
+              const handleId = incomingEdge.sourceHandle;
+              let viewerValue: unknown = undefined;
+
+              if (handleId) {
+                // If a specific handle is requested, only return that
+                if (handleId in sourceOutput) {
+                  viewerValue = sourceOutput[handleId];
+                }
               } else {
-                const keys = Object.keys(sourceOutput);
-                if (keys.length === 1) {
-                  viewerValue = sourceOutput[keys[0]];
+                // No handle specified - try default or single output
+                if ('default' in sourceOutput) {
+                  viewerValue = sourceOutput['default'];
+                } else if (Object.keys(sourceOutput).length === 1) {
+                  viewerValue = sourceOutput[Object.keys(sourceOutput)[0]];
                 }
               }
               
               // For viewers: if we have a handle, fetch serialized data from worker
-              if (viewerValue && typeof viewerValue === 'object' && '_schematicHandle' in viewerValue) {
-                const handleObj = viewerValue as { _schematicHandle: string };
-                const handleId = handleObj._schematicHandle;
-                console.log(`[Viewer] Fetching serialized data for handle: ${handleId}, workerClient:`, !!workerClient);
-                
-                if (workerClient) {
-                  try {
-                    const serializedData = await workerClient.getData(handleId);
-                    console.log(`[Viewer] getData returned:`, serializedData);
-                    if (serializedData) {
-                      viewerValue = serializedData;
-                      console.log(`[Viewer] Got serialized data, format:`, (serializedData as any).format);
-                    } else {
-                      console.warn(`[Viewer] No data returned for handle ${handleId}`);
+              if (viewerValue && typeof viewerValue === 'object') {
+                if ('_schematicHandle' in viewerValue) {
+                  const handleObj = viewerValue as { _schematicHandle: string };
+                  const handleId = handleObj._schematicHandle;
+                  console.log(`[Viewer] Fetching serialized data for handle: ${handleId}`);
+                  
+                  if (workerClient) {
+                    try {
+                      const serializedData = await workerClient.getData(handleId);
+                      if (serializedData) {
+                        viewerValue = serializedData;
+                      }
+                    } catch (err) {
+                      console.error(`[Viewer] Failed to fetch data for handle ${handleId}:`, err);
                     }
-                  } catch (err) {
-                    console.error(`[Viewer] Failed to fetch data for handle ${handleId}:`, err);
                   }
                 } else {
-                  console.warn(`[Viewer] workerClient is null, cannot fetch data`);
+                  // Check for nested handles (e.g. when viewing all outputs)
+                  const obj = viewerValue as Record<string, unknown>;
+                  const entries = Object.entries(obj);
+                  const updates: Record<string, unknown> = {};
+                  let hasUpdates = false;
+
+                  await Promise.all(entries.map(async ([key, val]) => {
+                    if (val && typeof val === 'object' && '_schematicHandle' in val) {
+                      const handleObj = val as { _schematicHandle: string };
+                      const handleId = handleObj._schematicHandle;
+                      
+                      if (workerClient) {
+                        try {
+                          const serializedData = await workerClient.getData(handleId);
+                          if (serializedData) {
+                            updates[key] = serializedData;
+                            hasUpdates = true;
+                          }
+                        } catch (err) {
+                          console.error(`[Viewer] Failed to fetch data for handle ${handleId} at key ${key}:`, err);
+                        }
+                      }
+                    }
+                  }));
+
+                  if (hasUpdates) {
+                    viewerValue = { ...obj, ...updates };
+                  }
                 }
-              } else {
-                console.log(`[Viewer] viewerValue is not a handle:`, viewerValue);
               }
               
               // Set the viewer's cache with the unwrapped value
