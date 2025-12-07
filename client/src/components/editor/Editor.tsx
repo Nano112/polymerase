@@ -3,7 +3,6 @@
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -24,28 +23,22 @@ import {
   Play, 
   Settings,
   Terminal,
-  Code,
-  RotateCcw,
-  Menu,
-  X,
   Plus,
-  Undo2,
-  Redo2,
-  Maximize2,
-  Trash2,
-  Copy,
-  Grid3X3,
-  HelpCircle,
-  Eye,
   Globe,
-  Zap,
-  RefreshCw,
-  ChevronDown,
+  X,
+  RotateCcw,
+  Save,
+  Maximize2,
+  Grid3X3,
+  Eye,
+  Home,
+  Book,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
 import { nodeTypes } from '../nodes';
 import { edgeTypes } from '../edges';
 import { Toolbar } from './Toolbar';
+import { TopBar } from './TopBar';
 import { CodePanel } from './CodePanel';
 import { ExecutionPanel } from './ExecutionPanel';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
@@ -74,7 +67,6 @@ export function Editor() {
     flowName,
     flowId,
     loadFlow,
-    setFlowName,
     selectedNodeId,
     selectNode,
     deleteNode,
@@ -93,8 +85,6 @@ export function Editor() {
     canRedo,
     debugMode,
     toggleDebugMode,
-    executionSettings,
-    setExecutionMode,
     getStaleNodes,
     getNodesToExecute,
     markNodeCached,
@@ -150,9 +140,6 @@ export function Editor() {
   
   // Clipboard for copy/paste
   const [clipboard, setClipboard] = useState<{ nodes: FlowNode[]; edges: Edge[] } | null>(null);
-  
-  // Run dropdown state
-  const [showRunMenu, setShowRunMenu] = useState(false);
   
   // Mobile states
   const [isMobile, setIsMobile] = useState(false);
@@ -340,12 +327,6 @@ export function Editor() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, canUndo, canRedo, handleDuplicateNode, handleCopyNodes, handlePasteNodes, handleZoomToFit]);
   
-  // Clear all node caches
-  const handleClearCache = useCallback(() => {
-    clearAllCache();
-    addExecutionLog('Cleared all node outputs');
-  }, [clearAllCache, addExecutionLog]);
-
   const { executeScript, executeSubflow, workerClient } = useLocalExecutor();
 
   /**
@@ -529,7 +510,7 @@ export function Editor() {
 
           // Special handling for file inputs
           if (node.type === 'file_input') {
-             outputValue = (node.data as any).fileData;
+             outputValue = (node.data as { fileData: unknown }).fileData;
              output = { output: outputValue, default: outputValue };
           }
 
@@ -1122,7 +1103,7 @@ export function Editor() {
 
           // Special handling for file inputs
           if (node.type === 'file_input') {
-             outputValue = (node.data as any).fileData;
+             outputValue = (node.data as { fileData: unknown }).fileData;
              output = { output: outputValue, default: outputValue };
           }
 
@@ -1396,8 +1377,6 @@ export function Editor() {
     }
   }, [selectedNodeId, deleteNode, selectNode, showCodeEditor, showNodeProperties]);
 
-  const selectedNode = nodes.find(n => n.id === selectedNodeId);
-  
   // Calculate cache stats - include both completed and cached nodes as "ready"
   const completedCount = Object.values(nodeCache).filter(c => c.status === 'completed' || c.status === 'cached').length;
   const totalNodes = nodes.length;
@@ -1445,416 +1424,149 @@ export function Editor() {
       tabIndex={0}
     >
       {/* Top Bar - Responsive */}
-      <div className="h-14 bg-neutral-900/80 backdrop-blur-xl border-b border-neutral-800/50 flex items-center justify-between px-2 sm:px-4 flex-shrink-0 mobile-header z-50 relative">
-        {/* Left: Flow info */}
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-          {/* Mobile menu button */}
-          {isMobile && (
-            <button
-              onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          )}
-          
-          {/* Desktop flows button */}
-          {!isMobile && (
-            <>
-              <button
-                onClick={() => setShowFlowManager(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-              >
-                <FolderOpen className="w-4 h-4" />
-                <span className="text-sm">Flows</span>
-              </button>
-              <div className="h-6 w-px bg-neutral-800" />
-            </>
-          )}
-          
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <input
-              type="text"
-              value={flowName}
-              onChange={(e) => setFlowName(e.target.value)}
-              className="bg-transparent text-white font-semibold text-sm focus:outline-none border-b border-transparent hover:border-neutral-700 focus:border-neutral-600 px-1 min-w-0 w-full max-w-[150px] sm:max-w-[200px]"
-              placeholder="Untitled Flow"
-            />
-            {flowId && !isMobile && (
-              <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 whitespace-nowrap">
-                Saved
-              </span>
-            )}
-          </div>
-          
-          {/* Undo/Redo buttons - Desktop only */}
-          {!isMobile && (
-            <>
-              <div className="h-6 w-px bg-neutral-800" />
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={undo}
-                  disabled={!canUndo()}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Undo (Cmd+Z)"
-                >
-                  <Undo2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={!canRedo()}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Redo (Cmd+Shift+Z)"
-                >
-                  <Redo2 className="w-4 h-4" />
-                </button>
-                <div className="h-4 w-px bg-neutral-700 mx-1" />
-                <button
-                  onClick={handleDuplicateNode}
-                  disabled={!selectedNodeId}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Duplicate (Cmd+D)"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleZoomToFit}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-                  title="Zoom to Fit (Cmd+0)"
-                >
-                  <Maximize2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setSnapToGrid(!snapToGrid)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    snapToGrid 
-                      ? 'text-blue-400 bg-blue-500/20 hover:bg-blue-500/30' 
-                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
-                  }`}
-                  title={`Snap to Grid (${snapToGrid ? 'On' : 'Off'})`}
-                >
-                  <Grid3X3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={toggleDebugMode}
-                  className={`p-2 rounded-lg transition-colors ${
-                    debugMode 
-                      ? 'text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30' 
-                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
-                  }`}
-                  title={`Debug Mode (${debugMode ? 'On' : 'Off'}) - Show data info on edges`}
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleClearCache}
-                  disabled={completedCount === 0}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Clear All Outputs"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-                <div className="w-px h-4 bg-neutral-700" />
-                <button
-                  onClick={() => setShowShortcuts(true)}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-                  title="Keyboard Shortcuts (⌘/)"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Center: Execution status - Hidden on mobile */}
-        {!isMobile && (
-          <div className="flex items-center gap-3">
-            {totalNodes > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${
-                    hasStaleNodes ? 'bg-amber-500' : 
-                    completedCount === totalNodes ? 'bg-green-500' : 'bg-neutral-600'
-                  }`} />
-                  <span className="text-xs text-neutral-400">
-                    {completedCount}/{totalNodes} computed
-                    {hasStaleNodes && (
-                      <span className="text-amber-400 ml-1">
-                        ({staleCount} stale)
-                      </span>
-                    )}
-                  </span>
-                </div>
-                {completedCount > 0 && (
-                  <button
-                    onClick={clearAllCache}
-                    className="p-1 rounded hover:bg-neutral-700/50 text-neutral-500 hover:text-neutral-300 transition-colors"
-                    title="Clear all cached results"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2">
-          {/* Edit node button - compact on mobile */}
-          {selectedNode && (
-            <button
-              onClick={() => {
-                setEditingNodeId(selectedNode.id);
-                if (selectedNode.type === 'code') {
-                  setShowCodeEditor(true);
-                } else {
-                  setShowNodeProperties(true);
-                }
-              }}
-              className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-            >
-              {selectedNode.type === 'code' ? (
-                <Code className="w-4 h-4" />
-              ) : (
-                <Settings className="w-4 h-4" />
-              )}
-              <span className="text-sm hidden sm:inline">Edit Node</span>
-            </button>
-          )}
-          
-          {/* API button - Desktop only */}
-          {!isMobile && flowId && (
-            <button
-              onClick={() => setShowApiPanel(true)}
-              className="flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-              title="API Settings"
-            >
-              <Globe className="w-4 h-4" />
-              <span className="text-sm hidden sm:inline">API</span>
-            </button>
-          )}
-          
-          {/* Run & Console buttons - Desktop only, FAB on mobile */}
-          {!isMobile && (
-            <div className="flex items-center gap-1.5">
-              {/* Live mode toggle */}
-              <button
-                onClick={() => setExecutionMode(executionSettings.mode === 'live' ? 'manual' : 'live')}
-                className={`p-2 rounded-lg transition-colors ${
-                  executionSettings.mode === 'live'
-                    ? 'text-amber-400 bg-amber-500/20 hover:bg-amber-500/30'
-                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
-                }`}
-                title={`Live Mode (${executionSettings.mode === 'live' ? 'On' : 'Off'}) - Auto-run when inputs change`}
-              >
-                <Zap className="w-4 h-4" />
-              </button>
-              
-              {/* Console button */}
-              <button
-                onClick={() => setShowExecution(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/50 transition-colors"
-                title="Open Console"
-              >
-                <Terminal className="w-4 h-4" />
-              </button>
-              
-              {/* Run Stale button - only show when there are stale nodes */}
-              {hasStaleNodes && !isExecuting && (
-                <button
-                  onClick={handleIncrementalRun}
-                  disabled={isExecuting}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium transition-all bg-amber-600 hover:bg-amber-500"
-                  title={`Run ${staleCount} stale node(s) only`}
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span className="hidden lg:inline">Run Stale</span>
-                  <span className="text-amber-200 text-xs bg-amber-700/50 px-1.5 py-0.5 rounded">
-                    {staleCount}
-                  </span>
-                </button>
-              )}
-              
-              {/* Run button with dropdown */}
-              <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                <div className="flex">
-                  <button
-                    onClick={handleQuickRun}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    disabled={isExecuting}
-                    className={`
-                      flex items-center gap-2 px-4 py-2 rounded-l-lg text-white text-sm font-medium transition-all
-                      ${isExecuting 
-                        ? 'bg-amber-500 cursor-wait' 
-                        : 'bg-green-600 hover:bg-green-500'
-                      }
-                    `}
-                    title="Run All Nodes"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    {isExecuting ? 'Running...' : 'Run All'}
-                  </button>
-                  <button
-                    onClick={() => setShowRunMenu(!showRunMenu)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    disabled={isExecuting}
-                    className={`
-                      px-2 py-2 rounded-r-lg text-white text-sm font-medium transition-all border-l border-green-700/50
-                      ${isExecuting 
-                        ? 'bg-amber-500 cursor-wait' 
-                        : 'bg-green-600 hover:bg-green-500'
-                      }
-                    `}
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </div>
-                
-                {/* Dropdown menu - rendered in portal to avoid z-index/event issues */}
-                {showRunMenu && createPortal(
-                  <div 
-                    className="fixed inset-0 z-[9999]" 
-                    onClick={() => setShowRunMenu(false)}
-                  >
-                    <div 
-                      className="fixed right-4 top-16 w-56 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl overflow-hidden"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="p-1">
-                        <button
-                          onClick={() => {
-                            handleQuickRun();
-                            setShowRunMenu(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-md transition-colors"
-                        >
-                          <Play className="w-4 h-4 text-green-400" />
-                          <div className="flex-1 text-left">
-                            <div className="font-medium">Run All</div>
-                            <div className="text-xs text-neutral-500">Execute entire flow</div>
-                          </div>
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            handleIncrementalRun();
-                            setShowRunMenu(false);
-                          }}
-                          disabled={!hasStaleNodes}
-                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <RefreshCw className="w-4 h-4 text-amber-400" />
-                          <div className="flex-1 text-left">
-                            <div className="font-medium">Run Stale Only</div>
-                            <div className="text-xs text-neutral-500">
-                              {hasStaleNodes ? `${staleCount} node(s) need update` : 'All nodes up to date'}
-                            </div>
-                          </div>
-                        </button>
-                        
-                        <div className="border-t border-neutral-800 my-1" />
-                        
-                        <div className="px-3 py-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Zap className={`w-4 h-4 ${executionSettings.mode === 'live' ? 'text-amber-400' : 'text-neutral-500'}`} />
-                              <span className="text-sm text-neutral-300">Live Mode</span>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExecutionMode(executionSettings.mode === 'live' ? 'manual' : 'live');
-                              }}
-                              className={`
-                                relative w-11 h-6 rounded-full transition-colors overflow-hidden
-                                ${executionSettings.mode === 'live' ? 'bg-amber-500' : 'bg-neutral-700'}
-                              `}
-                            >
-                              <span
-                                className={`
-                                  absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm
-                                  ${executionSettings.mode === 'live' ? 'translate-x-5' : 'translate-x-0'}
-                                `}
-                              />
-                            </button>
-                          </div>
-                          <p className="text-xs text-neutral-500 mt-1">
-                            Auto-run when inputs change
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <TopBar
+        isMobile={isMobile}
+        onRun={handleQuickRun}
+        onRunStale={handleIncrementalRun}
+        isExecuting={isExecuting}
+        hasStaleNodes={hasStaleNodes}
+        staleCount={staleCount}
+        completedCount={completedCount}
+        totalNodes={totalNodes}
+        onClearCache={clearAllCache}
+        onShowFlowManager={() => setShowFlowManager(true)}
+        onShowExecution={() => setShowExecution(true)}
+        onShowApiPanel={() => setShowApiPanel(true)}
+        onShowShortcuts={() => setShowShortcuts(true)}
+        snapToGrid={snapToGrid}
+        setSnapToGrid={setSnapToGrid}
+        onZoomToFit={handleZoomToFit}
+        onToggleMobileMenu={() => setShowMobileMenu(!showMobileMenu)}
+      />
       
       {/* Mobile Menu Overlay */}
       {isMobile && showMobileMenu && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileMenu(false)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowMobileMenu(false)}>
           <div 
-            className="absolute top-0 left-0 h-full w-72 bg-neutral-900 border-r border-neutral-800 shadow-2xl"
+            className="absolute top-0 left-0 h-full w-72 bg-neutral-900/95 backdrop-blur-xl border-r border-white/10 shadow-2xl animate-in slide-in-from-left duration-200"
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Menu</h2>
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-green-500/20 flex items-center justify-center">
+                  <div className="w-3 h-3 rounded-sm bg-green-500" />
+                </div>
+                Menu
+              </h2>
               <button
                 onClick={() => setShowMobileMenu(false)}
-                className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800"
+                className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-4 space-y-2">
-              <button
-                onClick={() => {
-                  setShowFlowManager(true);
-                  setShowMobileMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
-              >
-                <FolderOpen className="w-5 h-5" />
-                <span>Manage Flows</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setShowExecution(true);
-                  setShowMobileMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
-              >
-                <Terminal className="w-5 h-5" />
-                <span>Console Output</span>
-              </button>
-              
-              {completedCount > 0 && (
+            <div className="p-4 space-y-6 overflow-y-auto max-h-[calc(100vh-80px)]">
+              {/* Navigation */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-neutral-500 px-2 mb-2 uppercase tracking-wider">Navigation</div>
+                <button onClick={() => navigate('/')} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm">
+                  <Home className="w-4 h-4" /> Home
+                </button>
+                <button onClick={() => navigate('/docs')} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm">
+                  <Book className="w-4 h-4" /> Documentation
+                </button>
+              </div>
+
+              {/* File Actions */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-neutral-500 px-2 mb-2 uppercase tracking-wider">File</div>
                 <button
                   onClick={() => {
-                    clearAllCache();
+                    setShowFlowManager(true);
                     setShowMobileMenu(false);
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
                 >
-                  <RotateCcw className="w-5 h-5" />
-                  <span>Clear Cache ({completedCount})</span>
+                  <FolderOpen className="w-4 h-4" /> Manage Flows
                 </button>
-              )}
+                <button
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                >
+                  <Save className="w-4 h-4" /> Save Flow
+                </button>
+              </div>
+
+              {/* View Actions */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-neutral-500 px-2 mb-2 uppercase tracking-wider">View</div>
+                <button
+                  onClick={() => {
+                    handleZoomToFit();
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                >
+                  <Maximize2 className="w-4 h-4" /> Zoom to Fit
+                </button>
+                <button
+                  onClick={() => {
+                    setSnapToGrid(!snapToGrid);
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                >
+                  <Grid3X3 className={`w-4 h-4 ${snapToGrid ? 'text-green-400' : ''}`} /> 
+                  Snap to Grid
+                </button>
+                <button
+                  onClick={() => {
+                    toggleDebugMode();
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                >
+                  <Eye className={`w-4 h-4 ${debugMode ? 'text-green-400' : ''}`} /> 
+                  Debug Mode
+                </button>
+              </div>
+              
+              {/* Execution Actions */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-neutral-500 px-2 mb-2 uppercase tracking-wider">Execution</div>
+                <button
+                  onClick={() => {
+                    setShowExecution(true);
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                >
+                  <Terminal className="w-4 h-4" /> Console Output
+                </button>
+                
+                {completedCount > 0 && (
+                  <button
+                    onClick={() => {
+                      clearAllCache();
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-neutral-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                  >
+                    <RotateCcw className="w-4 h-4" /> Clear Cache ({completedCount})
+                  </button>
+                )}
+              </div>
             </div>
             
-            {/* Status on mobile menu */}
+            {/* Status Footer */}
             {totalNodes > 0 && (
-              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-neutral-800 bg-neutral-900/90">
+              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10 bg-neutral-900/50 backdrop-blur-md">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${completedCount === totalNodes ? 'bg-green-500' : 'bg-neutral-600'}`} />
-                  <span className="text-sm text-neutral-400">
+                  <span className="text-xs text-neutral-400">
                     {completedCount}/{totalNodes} nodes computed
                   </span>
                 </div>
@@ -1904,10 +1616,10 @@ export function Editor() {
           preventScrolling={true}
         >
           <Background color="#262626" gap={16} size={1} />
-          <Controls className="!bg-neutral-900 !border-neutral-800 !rounded-xl !shadow-xl" />
+          <Controls className="bg-neutral-900! border-neutral-800! rounded-xl! shadow-xl!" />
           {!isMobile && (
             <MiniMap
-              className="!bg-neutral-900 !border-neutral-800 !rounded-xl !shadow-xl"
+              className="bg-neutral-900! border-neutral-800! rounded-xl! shadow-xl!"
               nodeColor={(node) => {
                 const cache = nodeCache[node.id];
                 if (cache?.status === 'completed' || cache?.status === 'cached') return '#22c55e';
@@ -1974,7 +1686,7 @@ export function Editor() {
                 fab 
                 ${isExecuting 
                   ? 'bg-amber-500' 
-                  : 'bg-gradient-to-br from-green-500 to-emerald-600'
+                  : 'bg-linear-to-br from-green-500 to-emerald-600'
                 }
               `}
               style={{ right: '5rem', bottom: '1.5rem', left: 'auto' }}

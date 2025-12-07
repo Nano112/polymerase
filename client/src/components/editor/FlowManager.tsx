@@ -10,11 +10,9 @@ import {
   Plus, 
   Trash2, 
   Clock, 
-  FileCode,
-  Loader2,
-  AlertCircle,
-  Check,
-  Download,
+  FileCode, 
+  Loader2, 
+  AlertCircle, 
   Upload,
 } from 'lucide-react';
 import { useFlowStore } from '../../store/flowStore';
@@ -40,28 +38,11 @@ interface FlowManagerProps {
 export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
   const navigate = useNavigate();
   const [showNewFlow, setShowNewFlow] = useState(false);
-  // @ts-ignore
   const [newFlowName, setNewFlowName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   
-  const { loadFlow, exportFlow, clearFlow, flowId, flowName } = useFlowStore();
-
-  // Export flow to file
-  const handleExportToFile = () => {
-    const flowData = exportFlow();
-    const json = JSON.stringify(flowData, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${flowData.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.polyflow.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const { loadFlow, clearFlow, flowId } = useFlowStore();
 
   // Import flow from file
   const handleImportFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,7 +87,9 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
         loadFlow({
           ...flowData,
           id: crypto.randomUUID(),
-          name: flowData.name,
+          name: flowData.name || 'Imported Flow',
+          version: flowData.version || '1.0.0',
+          createdAt: flowData.createdAt || Date.now(),
           nodes: newNodes,
           edges: newEdges,
         });
@@ -140,52 +123,37 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
     enabled: isOpen,
   });
 
-  // Save current flow
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const flowData = exportFlow();
-      const method = flowId ? 'PUT' : 'POST';
-      const url = flowId 
-        ? `${SERVER_URL}/api/flows/${flowId}`
-        : `${SERVER_URL}/api/flows`;
-      
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(flowData),
-      });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      return json.flow;
-    },
-    onSuccess: (flow) => {
-      useFlowStore.getState().setFlowId(flow.id);
-      queryClient.invalidateQueries({ queryKey: ['flows'] });
-      if (window.location.pathname === '/editor') {
-        navigate(`/flow/${flow.id}`);
-      }
-    },
-  });
-
   // Create new flow
   const createMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await fetch(`${SERVER_URL}/api/flows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, nodes: [], edges: [] }),
+        body: JSON.stringify({
+          name,
+          jsonContent: { nodes: [], edges: [] },
+        }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
       return json.flow;
     },
     onSuccess: (flow) => {
-      clearFlow();
+      queryClient.invalidateQueries({ queryKey: ['flows'] });
+      setNewFlowName('');
+      setShowNewFlow(false);
+      // Load the new flow
+      loadFlow({
+        id: flow.id,
+        name: flow.name,
+        version: flow.version || '1.0.0',
+        nodes: [],
+        edges: [],
+        createdAt: new Date(flow.createdAt).getTime(),
+        updatedAt: new Date(flow.updatedAt).getTime(),
+      });
       useFlowStore.getState().setFlowId(flow.id);
       useFlowStore.getState().setFlowName(flow.name);
-      queryClient.invalidateQueries({ queryKey: ['flows'] });
-      setShowNewFlow(false);
-      setNewFlowName('');
       navigate(`/flow/${flow.id}`);
       onClose();
     },
@@ -238,86 +206,65 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
           className="hidden"
         />
 
-        {/* Actions Bar */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
+        {/* Header Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setShowNewFlow(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-purple-600/80 to-cyan-600/80 hover:from-purple-500/80 hover:to-cyan-500/80 transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg bg-blue-600 hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20"
             >
               <Plus className="w-4 h-4" />
               New Flow
             </button>
-            <button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all disabled:opacity-50"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : saveMutation.isSuccess ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <FileCode className="w-4 h-4" />
-              )}
-              {flowId ? 'Save Current' : 'Save Flow'}
-            </button>
-            <div className="w-px h-6 bg-neutral-700" />
-            <button
-              onClick={handleExportToFile}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all"
-              title="Export to .polyflow.json file"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            
+            <div className="h-8 w-px bg-neutral-800 mx-2 hidden sm:block" />
+            
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all"
-              title="Import from .polyflow.json file"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 transition-all"
+              title="Import from file"
             >
               <Upload className="w-4 h-4" />
-              Import
+              <span className="hidden sm:inline">Import</span>
             </button>
           </div>
-          
-          {flowId && (
-            <div className="text-sm text-neutral-400">
-              Editing: <span className="text-white font-medium">{flowName}</span>
-            </div>
-          )}
+
+          {/* Search / Filter could go here */}
         </div>
 
-        {/* New Flow Form */}
+        {/* New Flow Input */}
         {showNewFlow && (
-          <div className="mb-6 p-4 rounded-xl border border-purple-500/20 bg-purple-900/10 animate-slide-up">
-            <div className="flex items-center gap-2 mb-3">
-                    <button
-                      onClick={() => saveMutation.mutate()}
-                      disabled={saveMutation.isPending}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-300 rounded-lg bg-neutral-800/50 border border-neutral-700/50 hover:bg-neutral-700/50 transition-all disabled:opacity-50"
-                    >
-                      {saveMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : saveMutation.isSuccess ? (
-                        <Check className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <FileCode className="w-4 h-4" />
-                      )}
-                      {flowId ? 'Save Current' : 'Save Flow'}
-                  
-                {createMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  'Create'
-                )}
+          <div className="mb-6 p-4 rounded-xl bg-neutral-900 border border-blue-500/30 animate-in slide-in-from-top-2 duration-200">
+            <h3 className="text-sm font-medium text-blue-400 mb-3">Create New Flow</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newFlowName}
+                onChange={(e) => setNewFlowName(e.target.value)}
+                placeholder="Enter flow name..."
+                className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newFlowName.trim()) {
+                    createMutation.mutate(newFlowName.trim());
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (newFlowName.trim()) createMutation.mutate(newFlowName.trim());
+                }}
+                disabled={!newFlowName.trim() || createMutation.isPending}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
               </button>
               <button
                 onClick={() => {
                   setShowNewFlow(false);
                   setNewFlowName('');
                 }}
-                className="px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+                className="px-4 py-2 bg-neutral-800 text-neutral-400 text-sm font-medium rounded-lg hover:bg-neutral-700 hover:text-white transition-colors"
               >
                 Cancel
               </button>
@@ -326,87 +273,97 @@ export function FlowManager({ isOpen, onClose }: FlowManagerProps) {
         )}
 
         {/* Flow List */}
-        <div className="space-y-2">
-          {isLoading && (
-            <div className="flex items-center justify-center py-12 text-neutral-400">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              Loading flows...
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-neutral-500 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500/50" />
+              <p className="text-sm">Loading flows...</p>
             </div>
-          )}
-
-          {error && (
-            <div className="flex items-center gap-3 p-4 rounded-xl border border-red-500/20 bg-red-900/10 text-red-400">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="text-sm">Failed to load flows: {(error as Error).message}</span>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-red-400 gap-3 bg-red-500/5 rounded-xl border border-red-500/10">
+              <AlertCircle className="w-8 h-8" />
+              <p className="text-sm">Failed to load flows</p>
             </div>
-          )}
-
-          {data && data.length === 0 && (
-            <div className="text-center py-12 text-neutral-500">
-              <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No flows yet</p>
-              <p className="text-sm mt-1">Create your first flow to get started</p>
-            </div>
-          )}
-
-          {data?.map((flow) => (
-            <div
-              key={flow.id}
-              className={`
-                group flex items-center justify-between p-4 rounded-xl 
-                border transition-all duration-200 cursor-pointer
-                ${flowId === flow.id
-                  ? 'border-blue-500/30 bg-blue-500/5'
-                  : 'border-neutral-800/50 bg-neutral-900/30 hover:border-neutral-700/50 hover:bg-neutral-800/30'
-                }
-              `}
-              onClick={() => {
-                navigate(`/flow/${flow.id}`);
-                onClose();
-              }}
-            >
-              <div className="flex items-center gap-4">
-                <div className={`
-                  flex items-center justify-center w-10 h-10 rounded-lg
-                  ${flowId === flow.id ? 'bg-blue-500/20' : 'bg-neutral-800/50'}
-                `}>
-                  <FileCode className={`w-5 h-5 ${flowId === flow.id ? 'text-blue-400' : 'text-neutral-400'}`} />
-                </div>
-                <div>
-                  <div className="font-medium text-white flex items-center gap-2">
-                    {flow.name}
-                    {flowId === flow.id && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-neutral-500 mt-1">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDate(flow.updatedAt || flow.createdAt)}
-                    </span>
-                    <span>v{flow.version}</span>
-                  </div>
-                </div>
+          ) : data?.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-500 gap-4 border-2 border-dashed border-neutral-800 rounded-xl">
+              <div className="w-16 h-16 rounded-full bg-neutral-900 flex items-center justify-center">
+                <FolderOpen className="w-8 h-8 opacity-50" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Delete "${flow.name}"?`)) {
-                      deleteMutation.mutate(flow.id);
+              <div className="text-center">
+                <p className="text-lg font-medium text-neutral-300">No flows found</p>
+                <p className="text-sm mt-1">Create a new flow to get started</p>
+              </div>
+              <button
+                onClick={() => setShowNewFlow(true)}
+                className="mt-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Create Flow
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {data?.map((flow) => (
+                <div
+                  key={flow.id}
+                  className={`
+                    group relative flex items-center justify-between p-4 rounded-xl border transition-all duration-200
+                    ${flow.id === flowId 
+                      ? 'bg-blue-500/10 border-blue-500/30 shadow-[0_0_15px_-5px_rgba(59,130,246,0.2)]' 
+                      : 'bg-neutral-900/50 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800/50'
                     }
-                  }}
-                  disabled={deleteMutation.isPending}
-                  className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                  `}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+                  <div 
+                    className="flex-1 cursor-pointer min-w-0"
+                    onClick={() => {
+                      if (flow.id !== flowId) {
+                        useFlowStore.getState().setFlowId(flow.id);
+                        useFlowStore.getState().setFlowName(flow.name);
+                        navigate(`/flow/${flow.id}`);
+                        onClose();
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className={`font-medium truncate ${flow.id === flowId ? 'text-blue-400' : 'text-neutral-200 group-hover:text-white'}`}>
+                        {flow.name}
+                      </h3>
+                      {flow.id === flowId && (
+                        <span className="px-2 py-0.5 text-[10px] font-medium bg-blue-500/20 text-blue-300 rounded-full border border-blue-500/20">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-neutral-500">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(flow.updatedAt || flow.createdAt)}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <FileCode className="w-3 h-3" />
+                        v{flow.version}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Are you sure you want to delete this flow?')) {
+                          deleteMutation.mutate(flow.id);
+                        }
+                      }}
+                      className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Delete flow"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </Modal>

@@ -171,40 +171,43 @@ export function MobileNodeDrawer({ isOpen, onClose, onNodeAdded }: MobileNodeDra
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" />
       
       {/* Drawer */}
       <div 
-        className="absolute bottom-0 left-0 right-0 bg-neutral-900 rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300"
+        className="absolute bottom-0 left-0 right-0 bg-neutral-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300"
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-neutral-700 rounded-full" />
+          <div className="w-12 h-1.5 bg-white/10 rounded-full" />
         </div>
         
         {/* Header */}
         <div className="flex items-center justify-between px-4 pb-3">
-          <h2 className="text-lg font-semibold text-white">Add Node</h2>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-400" />
+            Add Node
+          </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800"
+            className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
         {/* Category tabs - horizontal scroll */}
-        <div className="flex gap-2 px-4 pb-3 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2 px-4 pb-4 overflow-x-auto no-scrollbar">
           {allCategories.map((category, idx) => (
             <button
               key={category.name}
               onClick={() => setActiveCategory(idx)}
               className={`
-                flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all
+                shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all
                 ${activeCategory === idx 
-                  ? `bg-${category.color}-500/20 text-${category.color}-400 border border-${category.color}-500/30` 
-                  : 'bg-neutral-800 text-neutral-400 border border-transparent'
+                  ? `bg-${category.color}-500/20 text-${category.color}-400 border border-${category.color}-500/30 shadow-[0_0_10px_-3px_rgba(var(--${category.color}-500-rgb),0.3)]` 
+                  : 'bg-white/5 text-neutral-400 border border-transparent hover:bg-white/10'
                 }
               `}
               style={activeCategory === idx ? {
@@ -228,7 +231,7 @@ export function MobileNodeDrawer({ isOpen, onClose, onNodeAdded }: MobileNodeDra
         </div>
         
         {/* Node cards - horizontal scroll */}
-        <div className="px-4 pb-6 overflow-x-auto no-scrollbar">
+        <div className="px-4 pb-8 overflow-x-auto no-scrollbar">
           <div className="flex gap-3 min-w-min">
             {/* Regular node templates */}
             {activeCategory < nodeCategories.length && 
@@ -237,16 +240,16 @@ export function MobileNodeDrawer({ isOpen, onClose, onNodeAdded }: MobileNodeDra
                   key={node.type + node.label}
                   onClick={() => handleAddNode(node)}
                   className={`
-                    flex-shrink-0 w-28 p-4 rounded-xl border border-neutral-800 
-                    hover:border-neutral-700 bg-neutral-800/50 hover:bg-neutral-800 
-                    transition-all active:scale-95
+                    shrink-0 w-32 p-4 rounded-xl border border-white/5 
+                    hover:border-white/10 bg-white/5 hover:bg-white/10 
+                    transition-all active:scale-95 flex flex-col items-center
                   `}
                 >
-                  <div className={`w-10 h-10 rounded-lg ${node.bg} flex items-center justify-center mb-3 mx-auto`}>
-                    <node.Icon className={`w-5 h-5 ${node.color}`} />
+                  <div className={`w-12 h-12 rounded-xl ${node.bg} flex items-center justify-center mb-3 shadow-lg`}>
+                    <node.Icon className={`w-6 h-6 ${node.color}`} />
                   </div>
-                  <div className="text-sm font-medium text-white text-center">{node.label}</div>
-                  <div className="text-[10px] text-neutral-500 text-center mt-1 line-clamp-1">{node.description}</div>
+                  <div className="text-sm font-medium text-white text-center w-full truncate">{node.label}</div>
+                  <div className="text-[10px] text-neutral-500 text-center mt-1 line-clamp-2 w-full">{node.description}</div>
                 </button>
               ))
             }
@@ -256,17 +259,17 @@ export function MobileNodeDrawer({ isOpen, onClose, onNodeAdded }: MobileNodeDra
               savedSubflows.map((subflow) => (
                 <div
                   key={subflow.id}
-                  className="flex-shrink-0 w-28 p-4 rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-800/50 hover:bg-neutral-800 transition-all relative group"
+                  className="shrink-0 w-32 p-4 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 transition-all relative group flex flex-col items-center"
                 >
                   <button
                     onClick={() => handleAddSubflow(subflow)}
-                    className="w-full"
+                    className="w-full flex flex-col items-center"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center mb-3 mx-auto">
-                      <Workflow className="w-5 h-5 text-indigo-400" />
+                    <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-3 shadow-lg">
+                      <Workflow className="w-6 h-6 text-indigo-400" />
                     </div>
-                    <div className="text-sm font-medium text-white text-center truncate">{subflow.name}</div>
-                    <div className="text-[10px] text-neutral-500 text-center mt-1">{subflow.category}</div>
+                    <div className="text-sm font-medium text-white text-center w-full truncate">{subflow.name}</div>
+                    <div className="text-[10px] text-neutral-500 text-center mt-1 w-full truncate">{subflow.category}</div>
                   </button>
                   <button
                     onClick={(e) => {

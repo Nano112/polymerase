@@ -38,10 +38,6 @@ export function Navigation() {
               <path d="M40 32 H48 M64 32 H72 M40 56 H48 M32 40 V48 M32 64 V72" className="stroke-neutral-700 group-hover:stroke-neutral-500 transition-colors" strokeWidth="2" />
             </svg>
           </div>
-          
-          <span className="font-bold text-xl tracking-tight text-white group-hover:text-green-400 transition-colors duration-300">
-            Flow
-          </span>
         </Link>
         
         {/* Right Actions */}
