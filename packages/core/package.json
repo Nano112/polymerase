@@ -30,7 +30,7 @@
     "zod": "^3.24.4"
   },
   "peerDependencies": {
-    "nucleation": "^0.1.130",
+    "nucleation": "^0.1.132",
     "synthase": "^1.0.3"
   },
   "peerDependenciesMeta": {
